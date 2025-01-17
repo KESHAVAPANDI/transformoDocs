@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance Recommendation</title>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #e0f7fa; /* Lighter healthcare blue for better contrast */
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            text-align: center;
+            color: #00796b; /* Deeper healthcare green */
+            margin-top: 40px;
+            font-size: 2.2em;
+        }
+
+        form {
+            max-width: 500px;
+            width: 100%;
+            background-color: #fff;
+            padding: 30px;
+            margin-top: 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            font-size: 16px;
+            color: #00796b;
+            margin-bottom: 8px;
+            display: inline-block;
+        }
+
+        input[type="number"], select {
+            width: 95%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+            transition: border-color 0.3s ease;
+        }
+        input[type="number"], select {
+            width: 95%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="number"]:focus, select:focus {
+            border-color: #00796b;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #00796b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #004d40;
+            transform: translateY(-2px);
+        }
+
+        #recommendations {
+            max-width: 500px;
+            width: 100%;
+            margin: 30px auto;
+            padding: 25px;
+            background-color: #f1f8e9;
+            border: 1px solid #c5e1a5;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        #recommendations h3 {
+            color: #388e3c;
+            font-size: 1.5em;
+        }
+
+        #recommendations p {
+            font-size: 16px;
+            color: #333;
+            padding: 10px 0;
+        }
+
+        /* Responsive styling for mobile screens */
+        @media (max-width: 768px) {
+            form, #recommendations {
+                padding: 20px;
+            }
+            button {
+                font-size: 15px;
+            }
+        }
+    </style>
+    <script>
+        async function getRecommendations(event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Collect input data from the form
+            const age = document.getElementById('age').value;
+            const salary = document.getElementById('salary').value;
+            const gender = document.getElementById('gender').value;
+            const preMeds = document.getElementById('preMeds').checked ? 1 : 0;
+
+            // Prepare the payload for the request
+            const userInput = {
+                Age: parseInt(age),
+                Salary: parseFloat(salary),
+                Gender: gender,
+                PreMeds: preMeds
+            };
+
+            // Send the request to the backend
+            const response = await fetch('/recommend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(userInput)
+            });
+
+            const data = await response.json();
+            displayRecommendations(data);
+        }
+
+        function displayRecommendations(data) {
+            // Display the recommended policies on the page
+            const resultDiv = document.getElementById('recommendations');
+            resultDiv.innerHTML = '<h3>Recommended Policies:</h3>';
+            data.forEach(policy => {
+                resultDiv.innerHTML += `<p>${policy.Policy}</p>`;
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Get Insurance Recommendations</h1>
+
+    <form id="form" onsubmit="getRecommendations(event)">
+        <label for="age">Age:</label>
+        <input type="number" id="age" required>
+
+        <label for="salary">Salary:</label>
+        <input type="number" id="salary" required>
+
+        <label for="gender">Gender:</label>
+        <select id="gender" required>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+        </select>
+
+        <label for="preMeds">Pre-existing Medical Conditions:</label>
+        <input type="checkbox" id="preMeds"> I have pre-existing conditions
+
+        <button type="submit">Get Recommendations</button>
+    </form>
+
+    <div id="recommendations"></div>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Editor & Translator</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h2, h3 {
+            color: #333;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .download-buttons {
+            margin-top: 15px;
+        }
+
+        .download-buttons button {
+            margin-bottom: 10px;
+        }
+
+        .translation-section {
+            margin-top: 20px;
+        }
+
+        .translation-section label, select {
+            margin-right: 10px;
+        }
+
+        #translatedText {
+            height: 150px;
+            background-color: #f1f1f1;
+        }
+
+        .warning {
+            color: red;
+            font-size: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Upload and Edit Document</h2>
+
+        <!-- Form to upload an image -->
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="imageInput" name="image" accept="image/*" required>
+            <button type="submit">Upload</button>
+        </form>
+
+        <h3>Extracted Text (Editable)</h3>
+        <textarea id="editableText" rows="10" cols="100"></textarea>
+
+        <h3>Download Edited Document</h3>
+        <div class="download-buttons">
+            <button onclick="downloadFile('txt')">Download as TXT</button>
+            <button onclick="downloadFile('docx')">Download as Word</button>
+            <button onclick="downloadFile('pdf')">Download as PDF</button>
+        </div>
+
+        <div class="translation-section">
+            <h3>Translate Text</h3>
+            <label for="languageSelect">Select Language:</label>
+            <select id="languageSelect">
+                <option value="ta">Tamil</option>
+                <option value="hi">Hindi</option>
+                <option value="en">English</option>
+            </select>
+            <button onclick="translateText()">Translate</button>
+
+            <h3>Translated Text (Editable)</h3>
+            <textarea id="translatedText" rows="10" cols="100"></textarea>
+
+            <h3>Re-Translate Edited Text</h3>
+            <label for="retranslateLanguageSelect">Select Language for Re-Translation:</label>
+            <select id="retranslateLanguageSelect">
+                <option value="ta">Tamil</option>
+                <option value="hi">Hindi</option>
+                <option value="en">English</option>
+            </select>
+            <button id="reTranslateBtn" onclick="reTranslateText()">Re-Translate</button>
+            <p class="warning" id="retranslateWarning">Re-translation can only be done once.(Multiple translations generates inaccuracies)</p>
+
+            <h3>Download Translated Document</h3>
+            <div class="download-buttons">
+                <button onclick="downloadTranslatedFile('txt')">Download Translated as TXT</button>
+                <button onclick="downloadTranslatedFile('docx')">Download Translated as Word</button>
+                <button onclick="downloadTranslatedFile('pdf')">Download Translated as PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let hasReTranslated = false;  // Flag to track if re-translation has been done
+
+        // Handle image upload and extract text using OCR
+        document.getElementById('uploadForm').onsubmit = function (e) {
+            e.preventDefault();
+            let formData = new FormData(this);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+              .then(data => {
+                document.getElementById('editableText').value = data.text;
+              });
+        };
+
+        // Handle download of the edited text in various formats
+        function downloadFile(format) {
+            let textContent = document.getElementById('editableText').value;
+            let language = document.getElementById('languageSelect').value;
+            let data = { text: textContent, format: format, language: language };
+
+            fetch('/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.blob())
+              .then(blob => {
+                let url = window.URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = `document_${language}.${format}`;
+                a.click();
+              });
+        }
+
+        // Handle text translation
+        function translateText() {
+            let textContent = document.getElementById('editableText').value;
+            let language = document.getElementById('languageSelect').value;
+
+            let data = {
+                text: textContent,
+                language: language
+            };
+
+            fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.json())
+              .then(data => {
+                document.getElementById('translatedText').value = data.translatedText;
+                hasReTranslated = false;  // Reset re-translation flag after the first translation
+                document.getElementById('reTranslateBtn').disabled = false;  // Enable re-translate button
+                document.getElementById('retranslateWarning').style.display = 'none';  // Hide warning
+              });
+        }
+
+        // Re-translate the edited translated text with a language option
+        function reTranslateText() {
+            if (hasReTranslated) {
+                // If re-translation is already done, disable the button and show warning
+                document.getElementById('reTranslateBtn').disabled = true;
+                document.getElementById('retranslateWarning').style.display = 'block';
+                return;
+            }
+
+            let textContent = document.getElementById('translatedText').value;  // Get edited translated text
+            let language = document.getElementById('retranslateLanguageSelect').value;  // Get selected re-translation language
+
+            let data = {
+                text: textContent,
+                language: language
+            };
+
+            fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.json())
+              .then(data => {
+                document.getElementById('translatedText').value = data.translatedText;
+                hasReTranslated = true;  // Set re-translation flag to true
+            });
+        }
+
+        // Handle download of the translated text in various formats
+        function downloadTranslatedFile(format) {
+            let textContent = document.getElementById('translatedText').value;  // Use edited translated text
+            let language = document.getElementById('retranslateLanguageSelect').value;  // Use re-translation language
+            let data = { text: textContent, format: format, language: language };
+
+            fetch('/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.blob())
+              .then(blob => {
+                let url = window.URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = `translated_document_${language}.${format}`;
+                a.click();
+              });
+        }
+    </script>
+</body>
+</html>
