@@ -39,7 +39,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | Workspace | What it is for |
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
-| **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate related lines together as positioned text blocks with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
+| **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages in an expandable set of languages, translate related lines together as positioned text blocks with the browser Translator API when available, swap languages quickly, compare original and translated pages, and download a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, add a caption overlay, and export one WebM sequence in the browser. |
 
 ### Small details, big difference
@@ -113,6 +113,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Translated blocks wrap within the original block area, shrink when needed, and are flagged if they still overflow.
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
+- The translation picker follows Chrome's documented language-code list, while the chosen pair is still checked against the browser's actual model availability. The API is not available in every browser. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/).
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export joins trimmed timeline clips into a WebM sequence with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Timed caption tracks, transitions, and MP4 export are not implemented yet.
 - DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.

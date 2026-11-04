@@ -385,7 +385,10 @@
     }
     const overflow = wrapped.length * lineHeight > height + .5;
     ctx.font = `${fontSize}px Arial, sans-serif`; ctx.fillStyle = '#171717'; ctx.textBaseline = 'top';
-    wrapped.forEach((text, index) => ctx.fillText(text, x, y + index * lineHeight, width));
+    const rtl = /^(ar|he)(?:-|$)/i.test(language), previousDirection = ctx.direction, previousAlign = ctx.textAlign;
+    ctx.direction = rtl ? 'rtl' : 'ltr'; ctx.textAlign = rtl ? 'right' : 'left';
+    wrapped.forEach((text, index) => ctx.fillText(text, rtl ? x + width : x, y + index * lineHeight, width));
+    ctx.direction = previousDirection; ctx.textAlign = previousAlign;
     return overflow;
   }
 
