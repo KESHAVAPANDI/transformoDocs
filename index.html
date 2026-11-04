@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101217" />
+    <meta name="description" content="Transformo is your calm, precise workspace for documents, translation, and video." />
+    <title>Transformo — Shape every file</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+    <div class="app-shell">
+      <aside class="sidebar glass-panel">
+        <a class="brand" href="#home" aria-label="Transformo home"><span class="brand-mark"><i></i><i></i><i></i></span><span>transformo<span class="brand-dot">.</span></span></a>
+        <div class="workspace-switcher"><span class="workspace-avatar">K</span><span class="workspace-copy"><strong>My workspace</strong><small>Personal plan</small></span><span class="chevron">⌄</span></div>
+        <div class="side-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-view="documents"><span class="nav-icon">▤</span> Documents <span class="nav-count">12</span></button>
+          <button class="nav-item" data-view="videos"><span class="nav-icon">▷</span> Video studio <span class="nav-new">NEW</span></button>
+          <button class="nav-item" data-view="activity"><span class="nav-icon">◷</span> Activity</button>
+        </nav>
+        <div class="side-label tools-label">QUICK TOOLS</div>
+        <nav class="tool-nav" aria-label="Quick tools">
+          <button class="tool-link" data-task="Translate"><span class="tool-glyph lilac">文</span> Translate</button>
+          <button class="tool-link" data-task="Convert"><span class="tool-glyph blue">⇄</span> Convert format</button>
+          <button class="tool-link" data-task="Merge"><span class="tool-glyph mint">⊕</span> Merge files</button>
+          <button class="tool-link" data-task="Split"><span class="tool-glyph peach">⫶</span> Split pages</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="storage-card"><div class="storage-top"><span>Cloud storage</span><span>68%</span></div><div class="storage-track"><span></span></div><small>6.8 GB of 10 GB used</small></div>
+          <button class="profile"><span class="profile-avatar">KP</span><span><strong>Keshav Pandi</strong><small>Free plan</small></span><span class="more">···</span></button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar"><div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong id="crumb-current">Documents</strong></div><div class="top-actions"><button class="search-trigger" id="search-trigger"><span>⌕</span> Search anything <kbd>⌘ K</kbd></button><button class="icon-button notification" aria-label="Notifications">♧<i></i></button><span class="top-avatar">KP</span></div></header>
+
+        <section class="page-view visible" id="documents-view">
+          <div class="welcome-row"><div><div class="eyebrow"><span class="live-dot"></span> YOUR CREATIVE WORKSPACE</div><h1>Make every file <span class="gradient-text">flow.</span></h1><p class="welcome-subtitle">A little less busywork. A lot more <span class="serif-italic">possibility.</span></p></div><button class="primary-button" id="upload-button"><span>＋</span> Upload files <kbd>U</kbd></button><input id="file-input" type="file" multiple hidden /></div>
+          <div class="hero-grid">
+            <div class="translate-card glass-panel"><div class="translate-orbit orbit-a"></div><div class="translate-orbit orbit-b"></div><div class="translate-head"><span class="feature-label"><span class="sparkle">✳</span> TRANSFORMO INTELLIGENCE</span><span class="beta-pill">BETA</span></div><div class="translate-content"><div class="translate-copy"><h2>Words change.<br /><em>Meaning stays.</em></h2><p>Translate documents while keeping every heading, paragraph, and detail right where it belongs.</p><button class="text-button" data-task="Translate">Try document translation <span>↗</span></button></div><div class="translate-visual"><div class="lang-chip source-chip"><span class="flag">🇬🇧</span><span>English</span><b>⌄</b></div><div class="translate-arrow">↘</div><div class="lang-chip target-chip"><span class="flag">🇯🇵</span><span>Japanese</span><b>⌄</b></div><div class="mini-doc"><div class="mini-doc-top"><span></span><span></span><span></span></div><div class="mini-doc-body"><div class="mini-line w75"></div><div class="mini-line w92"></div><div class="mini-line w52"></div><div class="mini-highlight">こんにちは、世界。</div><div class="mini-line w82"></div><div class="mini-line w64"></div></div></div><span class="orbit-star star-one">✦</span><span class="orbit-star star-two">✳</span></div></div></div>
+            <div class="drop-card glass-panel" id="drop-zone"><div class="drop-glow"></div><div class="drop-icon"><span>↑</span></div><div class="drop-title">Drop it like it's hot</div><div class="drop-desc">Bring a file in. We'll take it from here.</div><button class="browse-button" id="browse-button">Browse files <span>↗</span></button><div class="file-support">PDF, DOCX, PPTX, XLSX <span>·</span> up to 100 MB</div><div class="drop-decoration decor-one"></div><div class="drop-decoration decor-two"></div></div>
+          </div>
+
+          <section class="tool-section"><div class="section-heading"><div><h2>Good things, one click away</h2><p>Pick a tool. Keep your momentum.</p></div><button class="subtle-link" id="all-tools">All tools <span>→</span></button></div><div class="tool-grid">
+            <button class="tool-card glass-panel" data-task="Edit"><span class="tool-card-icon icon-edit">✎</span><span class="tool-card-copy"><strong>Edit document</strong><small>Make it yours, down to the pixel</small></span><span class="card-arrow">↗</span></button>
+            <button class="tool-card glass-panel" data-task="Convert"><span class="tool-card-icon icon-convert">⇄</span><span class="tool-card-copy"><strong>Convert format</strong><small>One file, many possibilities</small></span><span class="card-arrow">↗</span></button>
+            <button class="tool-card glass-panel" data-task="Merge"><span class="tool-card-icon icon-merge">⊕</span><span class="tool-card-copy"><strong>Merge documents</strong><small>Bring the whole story together</small></span><span class="card-arrow">↗</span></button>
+            <button class="tool-card glass-panel" data-task="Split"><span class="tool-card-icon icon-split">⫶</span><span class="tool-card-copy"><strong>Split a document</strong><small>Just the pages you need</small></span><span class="card-arrow">↗</span></button>
+          </div></section>
+
+          <section class="recent-section"><div class="section-heading recent-heading"><div><h2>Recently in your orbit</h2><p>Your files, right where you left them.</p></div><div class="recent-actions"><div class="filter-tabs"><button class="filter-tab active" data-filter="all">All files</button><button class="filter-tab" data-filter="document">Documents</button><button class="filter-tab" data-filter="video">Videos</button></div><button class="view-toggle" aria-label="Change view">▦</button></div></div><div class="file-table glass-panel"><div class="file-header"><span>NAME <i>↕</i></span><span>LAST OPENED <i>↕</i></span><span>FILE SIZE</span><span>SHARED WITH</span><span></span></div><div id="file-list"></div><div class="empty-state" id="empty-state" hidden><div>✧</div><strong>Nothing here just yet</strong><span>Upload a file and it will find its way home.</span></div></div></section>
+          <footer class="page-footer"><span>Made for the way you think <span class="footer-heart">✳</span></span><span>Privacy first · Files stay yours</span></footer>
+        </section>
+
+        <section class="page-view" id="videos-view"><div class="welcome-row video-welcome"><div><div class="eyebrow"><span class="live-dot video-dot"></span> THE VIDEO STUDIO</div><h1>Stories in <span class="gradient-text video-gradient">motion.</span></h1><p class="welcome-subtitle">Shape the footage. Find the <span class="serif-italic">feeling.</span></p></div><button class="primary-button video-primary" id="video-upload"><span>＋</span> Add video <kbd>U</kbd></button><input id="video-input" type="file" accept="video/*" multiple hidden /></div>
+          <div class="video-hero glass-panel"><div class="video-hero-copy"><span class="feature-label"><span class="sparkle">✳</span> YOUR VIDEO WORKSPACE</span><h2>Good stories<br />deserve <em>great cuts.</em></h2><p>Trim, arrange, subtitle, and translate your videos in one calm creative space.</p><button class="primary-button video-primary" id="start-editing">＋ Start a new edit</button></div><div class="video-preview"><div class="preview-frame"><div class="mountain mountain-back"></div><div class="mountain mountain-front"></div><div class="preview-sun"></div><button class="play-button">▶</button><div class="preview-time">00:14 <span>/ 01:42</span></div><div class="preview-caption">A little more <b>wonder.</b></div></div><div class="preview-controls"><span>◖◗</span><div class="preview-track"><i></i><b></b></div><span>⚙</span><span>⛶</span></div></div><div class="video-orb"></div></div>
+          <div class="section-heading video-project-head"><div><h2>Your projects</h2><p>Pick up where the story left off.</p></div><div class="filter-tabs"><button class="filter-tab active">Recent</button><button class="filter-tab">All projects</button></div></div><div class="video-projects" id="video-projects"></div><div class="video-tools"><span class="feature-label">A FEW WAYS TO MAKE IT YOURS</span><div><span>✂ Trim & split</span><span>文 Subtitles & translate</span><span>◌ Audio polish</span><span>⇧ Export anywhere</span></div></div></section>
+
+        <section class="page-view" id="activity-view"><div class="welcome-row"><div><div class="eyebrow"><span class="live-dot"></span> YOUR ACTIVITY</div><h1>A trail of <span class="gradient-text">progress.</span></h1><p class="welcome-subtitle">Everything you've made, all in one place.</p></div></div><div class="activity-card glass-panel"><span class="activity-mark">✳</span><h2>Your story starts here.</h2><p>As you work with documents and videos, your recent transformations will show up here.</p><button class="primary-button" data-go-documents>Back to documents <span>→</span></button></div></section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="modal-backdrop" id="modal-backdrop" hidden><section class="task-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close" id="modal-close" aria-label="Close">×</button><div class="modal-icon">✳</div><div class="eyebrow">YOUR NEXT TRANSFORMATION</div><h2 id="modal-title">Translate a document</h2><p id="modal-description">Keep your layout, spacing, and visual rhythm while every word finds a new language.</p><div class="modal-content" id="modal-content"></div><button class="primary-button modal-cta" id="modal-cta">Choose a file <span>↗</span></button><div class="modal-footnote">Your original stays untouched · Private by design</div></section></div>
+    <div class="search-overlay" id="search-overlay" hidden><div class="search-box glass-panel"><span>⌕</span><input id="search-input" placeholder="Search files, tools, and more..." /><kbd>ESC</kbd><div class="search-hint">Try <b>translate</b>, <b>merge</b>, or a file name</div><div id="search-results"></div></div></div>
+    <script src="app.js"></script>
+  </body>
+</html>
