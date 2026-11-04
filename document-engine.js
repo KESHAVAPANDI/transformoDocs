@@ -44,7 +44,10 @@
   async function splitPdf(file, range) {
     requireLibraries('PDFLib');
     const source = await PDFDocument.load(await file.arrayBuffer());
-    const indices = parsePageRanges(range, source.getPageCount());
+    const indices = Array.isArray(range)
+      ? [...new Set(range.map(Number))].sort((a, b) => a - b).map(page => page - 1)
+      : parsePageRanges(range, source.getPageCount());
+    if (indices.some(index => !Number.isInteger(index) || index < 0 || index >= source.getPageCount())) throw new Error(`Use page numbers from 1 to ${source.getPageCount()}.`);
     if (!indices.length) throw new Error('Enter the pages to keep, such as 1–3, 5.');
     const output = await PDFDocument.create();
     (await output.copyPages(source, indices)).forEach(page => output.addPage(page));
