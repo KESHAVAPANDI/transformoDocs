@@ -38,7 +38,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs, extract selected pages, convert images and text to PDF, or export PDF pages as PNGs. Tools open in a full-page workspace. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs, extract selected pages, reorder/rotate/remove PDF pages, convert images and text to PDF, or export PDF pages as PNGs. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate positioned text with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
 
@@ -105,6 +105,7 @@ transformoDocs/
 PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned line editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
 - PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
+- Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
 - Translation previews show up to 24 pages at a time; every page is included in the exported PDF. The in-page editor previews up to 80 pages.
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Long translated lines are shrunk to fit and flagged for review.
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.

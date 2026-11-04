@@ -1,29 +1,31 @@
 const iconTypes={pdf:'pdf',docx:'docx',doc:'docx',xlsx:'xlsx',xls:'xlsx',pptx:'pptx',ppt:'pptx',mp4:'mp4',mov:'mp4',webm:'mp4'};
 let files=[];
-let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents';
+let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents', organizeOrder=[], organizePreviewPages=[];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function updateTaskCta(){const button=$('#tool-cta');if(!button)return;button.disabled=pendingTask==='Translate'&&translatedDocument?false:pendingTask==='Merge'?selectedTaskFiles.length<2:!selectedTaskFiles.length}
 function renderFiles(){const list=$('#file-list'),shown=files.filter(f=>activeFilter==='all'||f.kind===activeFilter);$('#empty-state').hidden=shown.length>0;list.innerHTML=shown.map((f,i)=>`<div class="file-row" style="animation-delay:${i*45}ms"><div class="file-name"><span class="file-type-icon ${f.tone}">${esc(f.ext)}</span><span class="file-title-wrap">${f.id?`<button class="file-title file-open" data-open-file-id="${esc(f.id)}">${esc(f.name)}</button>`:`<div class="file-title">${esc(f.name)}</div>`}<div class="file-meta">${f.kind==='video'?'Video':'Saved on this device'}</div></span></div><span class="file-date">${esc(f.date)}</span><span class="file-size">${esc(f.size)}</span><button class="row-menu" aria-label="File actions" data-file-id="${esc(f.id||'')}" data-file="${esc(f.name)}">···</button></div>`).join('');renderVideoProjects();}
 function renderVideoProjects(){const root=$('#video-projects');if(!root)return;const clips=files.filter(file=>file.kind==='video');root.innerHTML=clips.length?clips.map((file,index)=>`<article class="video-project-card"><div class="project-thumb ${index%3===1?'thumb-two':index%3===2?'thumb-three':''}"><button class="project-play" type="button" data-open-video-index="${index}" aria-label="Open ${esc(file.name)}">▶</button></div><div class="project-meta"><span class="project-name">${esc(file.name)}</span><span class="project-duration">${esc(file.size)}</span></div><div class="project-updated">Saved on this device</div></article>`).join(''):'<div class="video-empty-state"><span>▷</span><strong>Your video space is ready.</strong><small>Add a clip to start an edit. It will stay on this device.</small></div>';}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2600)}
 function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===(view==='tool'?'documents':view)));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='tool'?$('#tool-title').textContent:'Documents';window.scrollTo({top:0,behavior:'smooth'});}
 function openTask(task){
-  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;
+  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;organizeOrder=[];organizePreviewPages=[];
   if($('.page-view.visible')?.id!=='tool-view')previousView=$('.page-view.visible')?.id.replace('-view','')||'documents';
   pendingTask=task; taskPages=[]; selectedTaskFiles=[];
-  const configs={Translate:['Translate a document','Translate the full document and review the translated pages before export.'],Edit:['Edit document text','Change extracted PDF text in place while the original file remains untouched.'],Convert:['Convert a file','Convert images and text to PDF, or export PDF pages as images.'],Merge:['Merge PDFs','Combine PDF pages in the order you choose.'],Split:['Split a PDF','Extract selected pages into a new PDF.']};
+  const configs={Translate:['Translate a document','Translate the full document and review the translated pages before export.'],Edit:['Edit document text','Change text directly over the page while keeping its original position.'],Organize:['Organize PDF pages','Reorder, rotate, and remove pages while keeping the document in view.'],Convert:['Convert a file','Convert images and text to PDF, or export PDF pages as images.'],Merge:['Merge PDFs','Combine PDF pages in the order you choose.'],Split:['Split a PDF','Extract selected pages into a new PDF.']};
   const [title,desc]=configs[task]||configs.Translate; $('#tool-title').textContent=title; $('#tool-description').textContent=desc;
-  const accepts=task==='Translate'||task==='Edit'?'application/pdf,.pdf':task==='Merge'?'application/pdf,.pdf':task==='Split'?'application/pdf,.pdf':'.pdf,.txt,image/*';
+  const accepts=['Translate','Edit','Organize','Merge','Split'].includes(task)?'application/pdf,.pdf':'.pdf,.txt,image/*';
   const multiple=task==='Merge'||task==='Convert'?'multiple':'';
   let fields=`<div class="tool-field"><label for="task-files">${task==='Merge'?'Choose two or more PDF files':task==='Convert'?'Choose PDF, text, or image files':'Choose a PDF file'}</label><input id="task-files" type="file" accept="${accepts}" ${multiple} /><span class="field-help">Files stay on this device. Nothing is uploaded.</span></div><div class="workspace-file-picker"><label for="workspace-file-picker">Or use a file already in your workspace</label><select id="workspace-file-picker" ${multiple}><option value="">Loading local files…</option></select><button class="secondary-button" id="load-workspace-files" type="button">Use selected files</button></div>`;
   if(task==='Split') fields+=`<div class="tool-field"><label for="page-range">Pages to extract</label><input id="page-range" placeholder="e.g. 1–4, 7, 10–12" /><span class="field-help">Page numbers start at 1.</span></div>`;
+  if(task==='Organize') fields+=`<div class="position-note">✧ <span>Move pages with the arrows, rotate a page in 90° steps, or remove pages. The source file is never changed.</span></div>`;
   if(task==='Convert') fields+=`<div class="tool-field"><label for="convert-format">Output</label><select id="convert-format"><option value="auto">Choose automatically</option><option value="pdf">PDF</option><option value="images">PNG page images (ZIP)</option></select></div>`;
   if(task==='Translate') fields+=`<div class="language-pair"><div class="tool-field"><label for="source-language">Translate from</label><select id="source-language"><option value="en">English</option><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div><div class="language-arrow">→</div><div class="tool-field"><label for="target-language">Translate to</label><select id="target-language"><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option><option value="en">English</option></select></div></div><div class="position-note">✧ <span>Translate the document page by page, then compare full-page previews before downloading.</span></div>`;
   if(task==='Edit') fields+=`<div class="position-note">✧ <span>Changing text keeps its original anchor. The edited PDF is image-backed to preserve visual fidelity.</span></div>`;
-  if(task==='Edit'||task==='Translate') fields+=`<div id="line-editor" class="line-editor" hidden></div>`;
+  if(task==='Edit'||task==='Translate'||task==='Organize') fields+=`<div id="line-editor" class="line-editor" hidden></div>`;
   $('#tool-content').innerHTML=fields;
-  $('#tool-cta').innerHTML=task==='Merge'?'Merge PDFs <span>↗</span>':task==='Split'?'Extract pages <span>↗</span>':task==='Translate'?'Translate document <span>↗</span>':task==='Edit'?'Export edited PDF <span>↗</span>':'Convert and download <span>↗</span>';
-  $('#tool-cta').disabled=task==='Translate';
+  $('#tool-cta').innerHTML=task==='Merge'?'Merge PDFs <span>↗</span>':task==='Split'?'Extract pages <span>↗</span>':task==='Organize'?'Save organized PDF <span>↗</span>':task==='Translate'?'Translate document <span>↗</span>':task==='Edit'?'Export edited PDF <span>↗</span>':'Convert and download <span>↗</span>';
+  $('#tool-cta').disabled=true;
   $('#task-files').addEventListener('change',loadTaskFiles);
   $('#load-workspace-files').addEventListener('click',loadWorkspaceSelection);
   if(task==='Translate')[$('#source-language'),$('#target-language')].forEach(select=>select.addEventListener('change',discardTranslationResult));
@@ -33,15 +35,15 @@ function openTask(task){
 async function loadTaskFiles(event){
   discardTranslationResult();
   selectedTaskFiles=[...event.target.files];
-  if(pendingTask==='Translate')$('#tool-cta').disabled=true;
+  updateTaskCta();
   await addFiles(selectedTaskFiles);
   await analyzeTaskFiles();
-  if(pendingTask==='Translate')$('#tool-cta').disabled=!selectedTaskFiles.length;
+  updateTaskCta();
 }
 async function populateWorkspacePicker(task){
   const select=$('#workspace-file-picker');if(!select)return;
   try{
-    const records=await WorkspaceStore.list(),isPdfOnly=['Edit','Translate','Split','Merge'].includes(task);
+    const records=await WorkspaceStore.list(),isPdfOnly=['Edit','Translate','Organize','Split','Merge'].includes(task);
     const eligible=records.filter(record=>{const name=record.name.toLowerCase(),isPdf=name.endsWith('.pdf'),isVideo=record.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/.test(name);return isPdfOnly?isPdf:task==='Convert'?!isVideo:true});
     select.innerHTML=eligible.length?eligible.map(record=>`<option value="${esc(record.id)}">${esc(record.name)} · ${record.size>1048576?`${(record.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(record.size/1024))} KB`}</option>`).join(''):'<option value="">No saved files yet</option>';
     select.closest('.workspace-file-picker').hidden=!eligible.length;
@@ -50,13 +52,44 @@ async function populateWorkspacePicker(task){
 async function loadWorkspaceSelection(){
   const select=$('#workspace-file-picker'),ids=[...select.selectedOptions].map(option=>option.value).filter(Boolean);
   if(!ids.length){toast('Choose a saved file first.');return}
-  try{discardTranslationResult();const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);if(pendingTask==='Translate')$('#tool-cta').disabled=true;await analyzeTaskFiles();if(pendingTask==='Translate')$('#tool-cta').disabled=!selectedTaskFiles.length;toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
+  try{discardTranslationResult();const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);updateTaskCta();await analyzeTaskFiles();updateTaskCta();toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
 }
 async function analyzeTaskFiles(){
   if(!selectedTaskFiles.length)return;
   if((pendingTask==='Edit'||pendingTask==='Translate')&&selectedTaskFiles.length===1){
     try{taskPages=await DocumentEngine.inspectPdf(selectedTaskFiles[0]);if(pendingTask==='Translate')await renderTranslationPreview(selectedTaskFiles[0]);else await renderVisualPdfEditor(selectedTaskFiles[0]);toast(`Document ready · ${taskPages.length} page${taskPages.length===1?'':'s'}.`)}catch(error){toast(error.message)}
+  } else if(pendingTask==='Organize'&&selectedTaskFiles.length===1){
+    try{await renderOrganizeWorkspace(selectedTaskFiles[0])}catch(error){toast(error.message)}
   } else toast(`${selectedTaskFiles.length} file${selectedTaskFiles.length===1?'':'s'} ready.`);
+}
+async function renderOrganizeWorkspace(file){
+  const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Preparing page organizer…</span></div>';
+  organizePreviewPages.forEach(page=>URL.revokeObjectURL(page.url));organizePreviewPages=[];
+  const preview=await DocumentEngine.renderPdfPages(file,.46,80);
+  organizePreviewPages=preview.pages.map(page=>({number:page.number,url:URL.createObjectURL(page.blob)}));
+  organizePreviewPages.forEach(page=>previewUrls.push(page.url));
+  organizeOrder=organizePreviewPages.map(page=>({index:page.number-1,rotation:0}));
+  renderOrganizePages(preview.total);
+}
+function renderOrganizePages(total=organizePreviewPages.length){
+  const root=$('#line-editor');if(!root)return;
+  const visibleOrder=organizeOrder.slice(0,organizePreviewPages.length);
+  const cards=visibleOrder.map((item,position)=>{
+    const page=organizePreviewPages.find(entry=>entry.number===item.index+1);if(!page)return'';
+    const transform=item.rotation%180?`rotate(${item.rotation}deg) scale(.68)`:`rotate(${item.rotation}deg)`;
+    return `<article class="organize-page-card" data-page-position="${position}"><div class="organize-page-preview"><img src="${page.url}" alt="Page ${item.index+1}" loading="lazy" style="transform:${transform}" /><span class="organize-page-number">${String(item.index+1).padStart(2,'0')}</span><button type="button" class="organize-remove" data-page-action="remove" aria-label="Remove page ${item.index+1}">×</button></div><div class="organize-page-actions"><span>Page ${item.index+1}</span><div><button type="button" data-page-action="up" aria-label="Move page ${item.index+1} earlier" ${position===0?'disabled':''}>↑</button><button type="button" data-page-action="down" aria-label="Move page ${item.index+1} later" ${position===organizeOrder.length-1?'disabled':''}>↓</button><button type="button" data-page-action="rotate" aria-label="Rotate page ${item.index+1}">↻</button></div></div></article>`;
+  }).join('');
+  const kept=total-(organizePreviewPages.length-organizeOrder.length);
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${total} pages · ${kept} kept</strong><span>Reorder, rotate, or remove pages in the preview below.</span></div><span class="organize-status">${kept} pages</span></div><div class="organize-page-grid">${cards}</div>${total>organizePreviewPages.length?`<div class="preview-limit-note">Showing the first ${organizePreviewPages.length} pages. Later pages stay in their original order after these.</div>`:''}`;
+  root.querySelector('.organize-page-grid').addEventListener('click',event=>{
+    const button=event.target.closest('[data-page-action]');if(!button)return;
+    const card=button.closest('[data-page-position]'),position=Number(card.dataset.pagePosition),action=button.dataset.pageAction;
+    if(action==='remove'){if(organizeOrder.length===1){toast('Keep at least one page in the document.');return}organizeOrder.splice(position,1)}
+    if(action==='rotate')organizeOrder[position].rotation=(organizeOrder[position].rotation+90)%360;
+    if(action==='up'&&position>0)[organizeOrder[position-1],organizeOrder[position]]=[organizeOrder[position],organizeOrder[position-1]];
+    if(action==='down'&&position<organizeOrder.length-1)[organizeOrder[position+1],organizeOrder[position]]=[organizeOrder[position],organizeOrder[position+1]];
+    renderOrganizePages(total);
+  });
 }
 function ocrPanel(){return '<div class="position-note">Some pages are scans. Read them with OCR to make the text editable and translatable.</div><div class="ocr-controls"><select id="ocr-language" aria-label="OCR language"><option value="eng">English</option><option value="hin">Hindi</option><option value="tam">Tamil</option><option value="jpn">Japanese</option><option value="spa">Spanish</option><option value="fra">French</option></select><button class="secondary-button" id="run-ocr" type="button">Read scanned pages</button><span id="ocr-progress" class="field-help"></span></div>'}
 async function renderVisualPdfEditor(file){
@@ -125,6 +158,7 @@ async function performCurrentTask(){
   try{
     if(pendingTask==='Merge') toast(await DocumentEngine.mergePdfs(selectedTaskFiles));
     else if(pendingTask==='Split'){if(!selectedTaskFiles[0])throw new Error('Choose a PDF first.');toast(await DocumentEngine.splitPdf(selectedTaskFiles[0],$('#page-range').value))}
+    else if(pendingTask==='Organize'){if(!selectedTaskFiles[0])throw new Error('Choose a PDF first.');toast(await DocumentEngine.organizePdf(selectedTaskFiles[0],organizeOrder))}
     else if(pendingTask==='Convert'){
       if(!selectedTaskFiles.length)throw new Error('Choose a file first.');
       const out=$('#convert-format').value;
@@ -139,13 +173,13 @@ async function performCurrentTask(){
       if(!selectedTaskFiles[0]||!taskPages.length)throw new Error('Choose a text-based PDF first.');readEditedLines();
       const longLines=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages);toast(longLines?`PDF downloaded. Review ${longLines} long line${longLines===1?'':'s'} for fit.`:'Edited PDF downloaded.');
     }
-  }catch(error){toast(error.message||'Could not complete this operation.')}finally{button.disabled=false;button.innerHTML=pendingTask==='Translate'&&translatedDocument?'Download translated PDF <span>↗</span>':label}
+  }catch(error){toast(error.message||'Could not complete this operation.')}finally{button.innerHTML=pendingTask==='Translate'&&translatedDocument?'Download translated PDF <span>↗</span>':label;updateTaskCta()}
 }
 function closeTool(){previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];setView(previousView||'documents')}
 async function addFiles(fileList,kind){const incoming=[...fileList];if(!incoming.length)return;let saved=0;for(const file of incoming){const ext=(file.name.split('.').pop()||'file').toLowerCase();let record;try{record=await WorkspaceStore.save(file);saved++}catch(error){toast(`${file.name} is available until this tab closes; local storage could not save it.`)}files.unshift({id:record?.id,name:file.name,ext:ext.toUpperCase().slice(0,5),size:file.size>1048576?`${(file.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(file.size/1024))} KB`,date:'Just now',kind:kind||(['mp4','mov','webm'].includes(ext)?'video':'document'),people:['KP'],tone:iconTypes[ext]||'docx',file});}renderFiles();toast(`${incoming.length} ${incoming.length===1?'file':'files'} added${saved?` · ${saved} saved on this device`:''}`);}
 async function restoreWorkspaceFiles(){try{const records=await WorkspaceStore.list();const restored=records.map(record=>{const ext=(record.name.split('.').pop()||'file').toLowerCase();return{id:record.id,name:record.name,ext:ext.toUpperCase().slice(0,5),size:record.size>1048576?`${(record.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(record.size/1024))} KB`,date:'Saved locally',kind:record.type.startsWith('video/')?'video':'document',people:['KP'],tone:iconTypes[ext]||'docx',file:record.file}});files=[...restored,...files.filter(file=>!file.id||!restored.some(record=>record.id===file.id))];renderFiles()}catch{}}
 function showSearch(){const el=$('#search-overlay');el.hidden=false;setTimeout(()=>$('#search-input').focus(),25);renderSearch('')}
-function renderSearch(q){const terms=[...new Set([...files.map(f=>f.name), 'Translate a document','Edit document','Convert format','Merge documents','Split pages','Video studio'])];const results=terms.filter(x=>!q||x.toLowerCase().includes(q.toLowerCase())).slice(0,6);$('#search-results').innerHTML=results.map(x=>`<button class="search-result" data-search="${esc(x)}">${esc(x)}<small>${x.includes('.')?'File':'Tool'}</small></button>`).join('')}
+function renderSearch(q){const terms=[...new Set([...files.map(f=>f.name), 'Translate a document','Edit document','Organize pages','Convert format','Merge documents','Split pages','Video studio'])];const results=terms.filter(x=>!q||x.toLowerCase().includes(q.toLowerCase())).slice(0,6);$('#search-results').innerHTML=results.map(x=>`<button class="search-result" data-search="${esc(x)}">${esc(x)}<small>${x.includes('.')?'File':'Tool'}</small></button>`).join('')}
 $('#file-list').addEventListener('click',async e=>{const open=e.target.closest('[data-open-file-id]');if(open){const record=await WorkspaceStore.get(open.dataset.openFileId);if(!record){toast('That local file is no longer available.');return}if(record.type.startsWith('video/')){TransformoVideoEditor.open(record.file);return}const task=record.name.toLowerCase().endsWith('.pdf')?'Edit':'Convert';openTask(task);selectedTaskFiles=[record.file];await analyzeTaskFiles();return}const button=e.target.closest('.row-menu');if(button){if(!button.dataset.fileId){toast(`${button.dataset.file} is a sample item. Upload a file to work with it.`);return}if(confirm(`Remove “${button.dataset.file}” from this device?`)){await WorkspaceStore.remove(button.dataset.fileId);files=files.filter(file=>file.id!==button.dataset.fileId);renderFiles();toast('Removed from this device.')}}});
 $$('.nav-item').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 $$('[data-task]').forEach(b=>b.addEventListener('click',()=>openTask(b.dataset.task)));
@@ -155,7 +189,7 @@ $('#video-upload').addEventListener('click',()=>$('#video-input').click());$('#v
 $('#video-projects').addEventListener('click',e=>{const button=e.target.closest('[data-open-video-index]');if(!button)return;const file=files.filter(item=>item.kind==='video')[Number(button.dataset.openVideoIndex)];if(file)TransformoVideoEditor.open(file.file)});
 ['dragenter','dragover'].forEach(name=>$('#drop-zone').addEventListener(name,e=>{e.preventDefault();$('#drop-zone').classList.add('drag-over')}));['dragleave','drop'].forEach(name=>$('#drop-zone').addEventListener(name,e=>{e.preventDefault();$('#drop-zone').classList.remove('drag-over')}));$('#drop-zone').addEventListener('drop',e=>addFiles(e.dataTransfer.files));
 $('#tool-back').addEventListener('click',closeTool);$('#tool-cta').addEventListener('click',performCurrentTask);
-$('#all-tools').addEventListener('click',()=>$('#tool-section').scrollIntoView({behavior:'smooth',block:'start'}));$('#search-trigger').addEventListener('click',showSearch);$('#search-input').addEventListener('input',e=>renderSearch(e.target.value));$('#search-overlay').addEventListener('click',e=>{if(e.target===$('#search-overlay'))$('#search-overlay').hidden=true});$('#search-results').addEventListener('click',e=>{const b=e.target.closest('[data-search]');if(!b)return;const task=b.dataset.search.split(' ')[0];if(['Translate','Edit','Convert','Merge','Split'].includes(task)){ $('#search-overlay').hidden=true;openTask(task)}else if(task==='Video'){$('#search-overlay').hidden=true;setView('videos')}else{$('#search-overlay').hidden=true;toast(`Opening ${b.dataset.search}`)}});
+$('#all-tools').addEventListener('click',()=>$('#tool-section').scrollIntoView({behavior:'smooth',block:'start'}));$('#search-trigger').addEventListener('click',showSearch);$('#search-input').addEventListener('input',e=>renderSearch(e.target.value));$('#search-overlay').addEventListener('click',e=>{if(e.target===$('#search-overlay'))$('#search-overlay').hidden=true});$('#search-results').addEventListener('click',e=>{const b=e.target.closest('[data-search]');if(!b)return;const task=b.dataset.search.split(' ')[0];if(['Translate','Edit','Organize','Convert','Merge','Split'].includes(task)){ $('#search-overlay').hidden=true;openTask(task)}else if(task==='Video'){$('#search-overlay').hidden=true;setView('videos')}else{$('#search-overlay').hidden=true;toast(`Opening ${b.dataset.search}`)}});
 $('#start-editing').addEventListener('click',()=>$('#video-input').click());$$('[data-go-documents]').forEach(b=>b.addEventListener('click',()=>setView('documents')));
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();showSearch()}

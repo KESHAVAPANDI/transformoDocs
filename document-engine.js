@@ -1,6 +1,6 @@
 /* Local document operations. Files are read in this tab and are never uploaded. */
 (() => {
-  const { PDFDocument, StandardFonts, rgb } = window.PDFLib || {};
+  const { PDFDocument, StandardFonts, rgb, degrees } = window.PDFLib || {};
   const pdfjs = window.pdfjsLib;
   if (pdfjs) pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -50,6 +50,29 @@
     (await output.copyPages(source, indices)).forEach(page => output.addPage(page));
     download(bytesToBlob(await output.save()), `${safeBase(file.name)}-pages-${indices.map(i => i + 1).join('_')}.pdf`);
     return `Created a new PDF with ${indices.length} selected page${indices.length === 1 ? '' : 's'}.`;
+  }
+
+  async function organizePdf(file, order) {
+    requireLibraries('PDFLib');
+    const source = await PDFDocument.load(await file.arrayBuffer()), pageCount = source.getPageCount();
+    if (!Array.isArray(order) || !order.length) throw new Error('Keep at least one page in the document.');
+    const seen = new Set(), output = await PDFDocument.create();
+    for (const item of order) {
+      const index = Number(item.index), rotation = Number(item.rotation || 0);
+      if (!Number.isInteger(index) || index < 0 || index >= pageCount || seen.has(index)) throw new Error('The page order is invalid.');
+      if (![0, 90, 180, 270].includes(rotation)) throw new Error('Page rotation must be 90 degree steps.');
+      seen.add(index);
+      const [page] = await output.copyPages(source, [index]);
+      if (rotation) page.setRotation(degrees((page.getRotation().angle + rotation) % 360));
+      output.addPage(page);
+    }
+    for (let index = 0; index < pageCount; index++) {
+      if (seen.has(index)) continue;
+      const [page] = await output.copyPages(source, [index]);
+      output.addPage(page);
+    }
+    download(bytesToBlob(await output.save()), `${safeBase(file.name)}-organized.pdf`);
+    return `Saved ${output.getPageCount()} pages. The original is unchanged.`;
   }
 
   async function imagesToPdf(files) {
@@ -223,5 +246,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, splitPdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
