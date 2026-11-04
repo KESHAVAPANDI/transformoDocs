@@ -60,6 +60,6 @@
       const blob=await finished;stream.getTracks().forEach(track=>track.stop());const link=overlay.querySelector('#download-video');link.href=URL.createObjectURL(blob);link.download=`${currentFile.name.replace(/\.[^.]+$/,'')}-transformo.webm`;link.hidden=false;status.textContent=`Export ready · ${(blob.size/1048576).toFixed(1)} MB`;notify('Your edited video is ready to download.');
     }catch(error){status.textContent=error.message||'Video export failed.';notify(status.textContent)}finally{button.disabled=false}
   }
-  input?.addEventListener('change',event=>{const file=[...event.target.files].find(item=>item.type.startsWith('video/'));if(file)editor(file)});
   document.querySelector('#video-projects')?.addEventListener('click',()=>input?.click());
+  window.TransformoVideoEditor={open:editor};
 })();

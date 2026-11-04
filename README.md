@@ -34,7 +34,7 @@ Transformo is a local-first web workspace for common document operations and a f
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Merge PDFs, extract selected pages, convert images and text to PDF, and export PDF pages as PNGs. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs, extract selected pages, convert images and text to PDF, or export PDF pages as PNGs. |
 | **Layout-aware editing and translation** | Extract PDF text into positioned lines, OCR image-only pages, review or edit each line, translate with the browser Translator API when available, and render replacement text at the same page coordinates. |
 | **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
 | **Activity** | A natural home for recent transformations and project history as the product grows. |
@@ -88,6 +88,8 @@ transformoDocs/
 ├── app.js              # App navigation and task workflows
 ├── document-engine.js  # In-browser PDF and image/text conversion
 ├── ocr.css             # OCR controls
+├── workspace-store.js  # Device-local file shelf backed by IndexedDB
+├── workspace.css       # Saved-file selection and workspace controls
 ├── video-engine.js     # Local trim, caption, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
@@ -104,7 +106,7 @@ PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned
 - PDF image-backed export assumes a white page background for covering replaced text. Complex rotated text, columns, and colored backgrounds need review.
 - Video export creates a single WebM clip with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Multi-clip editing, multiple caption timings, and MP4 export are not implemented yet.
 - DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.
-- Files are not uploaded or persisted between sessions. The static PDF libraries are fetched from CDNs when the app loads.
+- Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
 ## 💡 More ideas worth exploring
 
