@@ -30,14 +30,17 @@ Translate a page and its text should stay in place. Edit a paragraph and the res
 
 Transformo is a local-first web workspace for common document operations and a first cut at the video studio.
 
+## Design direction
+
+Document tools open in a dedicated page workspace, with the file and its preview kept in view through the operation. Tool discovery follows the clear task groupings used by [iLovePDF](https://www.ilovepdf.com/), while the interface uses layered, translucent surfaces informed by [Apple's Human Interface Guidelines for materials](https://developer.apple.com/design/human-interface-guidelines/materials).
+
 ## ✨ The experience
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs, extract selected pages, convert images and text to PDF, or export PDF pages as PNGs. |
-| **Layout-aware editing and translation** | Extract PDF text into positioned lines, OCR image-only pages, review or edit each line, translate with the browser Translator API when available, and render replacement text at the same page coordinates. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs, extract selected pages, convert images and text to PDF, or export PDF pages as PNGs. Tools open in a full-page workspace. |
+| **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate positioned text with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
-| **Activity** | A natural home for recent transformations and project history as the product grows. |
 
 ### Small details, big difference
 
@@ -91,6 +94,7 @@ transformoDocs/
 ├── workspace-store.js  # Device-local file shelf backed by IndexedDB
 ├── workspace.css       # Saved-file selection and workspace controls
 ├── feedback.css        # Toast feedback above dialogs
+├── tool-workspace.css  # Full-page document tools and page previews
 ├── video-engine.js     # Local trim, caption, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
@@ -101,6 +105,7 @@ transformoDocs/
 PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned line editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
 - PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
+- Translation previews show up to 24 pages at a time; every page is included in the exported PDF. The in-page editor previews up to 80 pages.
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Long translated lines are shrunk to fit and flagged for review.
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.

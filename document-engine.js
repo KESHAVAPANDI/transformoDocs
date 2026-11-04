@@ -134,6 +134,25 @@
     return pages;
   }
 
+  async function renderPdfPages(file, scale = 0.42, limit = 24) {
+    if (!pdfjs) throw new Error('The PDF preview library did not load. Check your connection and reload.');
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [];
+    try {
+      for (let number = 1; number <= Math.min(pdf.numPages, limit); number++) {
+        const page = await pdf.getPage(number), viewport = page.getViewport({ scale });
+        const canvas = window.document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+        if (!blob) throw new Error(`Page ${number} could not be rendered for preview.`);
+        pages.push({ number, blob });
+        canvas.width = 0; canvas.height = 0;
+      }
+      return { pages, total: pdf.numPages };
+    } finally { await pdf.destroy(); }
+  }
+
   async function ocrPdf(file, language = 'eng', onProgress = () => {}, existingPages = []) {
     if (!pdfjs) throw new Error('The PDF renderer did not load. Check your connection and reload.');
     if (!window.Tesseract) throw new Error('The OCR engine did not load. Check your connection and reload.');
@@ -171,7 +190,7 @@
     return pages;
   }
 
-  async function exportPositionedPdf(file, pages, onProgress = () => {}) {
+  async function exportPositionedPdf(file, pages, onProgress = () => {}, returnBlob = false) {
     requireLibraries('PDFLib');
     if (!pdfjs) throw new Error('The PDF renderer did not load.');
     const source = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise, output = await PDFDocument.create();
@@ -198,9 +217,11 @@
       newPage.drawImage(image, { x: 0, y: 0, width: newPage.getWidth(), height: newPage.getHeight() });
       onProgress(index + 1, source.numPages);
     }
-    download(bytesToBlob(await output.save()), `${safeBase(file.name)}-transformed.pdf`);
+    const blob = bytesToBlob(await output.save());
+    if (returnBlob) return { blob, overflowLines, filename: `${safeBase(file.name)}-translated.pdf` };
+    download(blob, `${safeBase(file.name)}-transformed.pdf`);
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, splitPdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, splitPdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();

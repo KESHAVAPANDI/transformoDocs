@@ -1,41 +1,42 @@
 const iconTypes={pdf:'pdf',docx:'docx',doc:'docx',xlsx:'xlsx',xls:'xlsx',pptx:'pptx',ppt:'pptx',mp4:'mp4',mov:'mp4',webm:'mp4'};
-let files=[
- {name:'Q4 Brand Guidelines.pdf',ext:'PDF',size:'2.4 MB',date:'Just now',kind:'document',people:['KP','AM','JL'],tone:'pdf'},
- {name:'Product launch brief.docx',ext:'DOCX',size:'846 KB',date:'Yesterday',kind:'document',people:['KP','AM'],tone:'docx'},
- {name:'Campaign budget 2025.xlsx',ext:'XLSX',size:'1.2 MB',date:'Oct 28, 2025',kind:'document',people:['KP'],tone:'xlsx'},
- {name:'The little things.mp4',ext:'MP4',size:'84.6 MB',date:'Oct 26, 2025',kind:'video',people:['KP','JL'],tone:'mp4'},
- {name:'Creative direction.pptx',ext:'PPTX',size:'5.8 MB',date:'Oct 24, 2025',kind:'document',people:['KP','AM','JL'],tone:'pptx'}
-];
-let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[];
+let files=[];
+let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function renderFiles(){const list=$('#file-list'),shown=files.filter(f=>activeFilter==='all'||f.kind===activeFilter);$('#empty-state').hidden=shown.length>0;list.innerHTML=shown.map((f,i)=>`<div class="file-row" style="animation-delay:${i*45}ms"><div class="file-name"><span class="file-type-icon ${f.tone}">${esc(f.ext)}</span><span class="file-title-wrap">${f.id?`<button class="file-title file-open" data-open-file-id="${esc(f.id)}">${esc(f.name)}</button>`:`<div class="file-title">${esc(f.name)}</div>`}<div class="file-meta">${f.kind==='video'?'Video':f.id?'Saved on this device':'In my workspace'}</div></span></div><span class="file-date">${esc(f.date)}</span><span class="file-size">${esc(f.size)}</span><span class="sharing">${f.people.slice(0,3).map((p,n)=>`<span class="share-avatar" style="z-index:${3-n}">${esc(p)}</span>`).join('')}${f.people.length>2?'<span class="share-plus">+1</span>':''}</span><button class="row-menu" aria-label="File actions" data-file-id="${esc(f.id||'')}" data-file="${esc(f.name)}">···</button></div>`).join('');}
+function renderFiles(){const list=$('#file-list'),shown=files.filter(f=>activeFilter==='all'||f.kind===activeFilter);$('#empty-state').hidden=shown.length>0;list.innerHTML=shown.map((f,i)=>`<div class="file-row" style="animation-delay:${i*45}ms"><div class="file-name"><span class="file-type-icon ${f.tone}">${esc(f.ext)}</span><span class="file-title-wrap">${f.id?`<button class="file-title file-open" data-open-file-id="${esc(f.id)}">${esc(f.name)}</button>`:`<div class="file-title">${esc(f.name)}</div>`}<div class="file-meta">${f.kind==='video'?'Video':'Saved on this device'}</div></span></div><span class="file-date">${esc(f.date)}</span><span class="file-size">${esc(f.size)}</span><button class="row-menu" aria-label="File actions" data-file-id="${esc(f.id||'')}" data-file="${esc(f.name)}">···</button></div>`).join('');renderVideoProjects();}
+function renderVideoProjects(){const root=$('#video-projects');if(!root)return;const clips=files.filter(file=>file.kind==='video');root.innerHTML=clips.length?clips.map((file,index)=>`<article class="video-project-card"><div class="project-thumb ${index%3===1?'thumb-two':index%3===2?'thumb-three':''}"><button class="project-play" type="button" data-open-video-index="${index}" aria-label="Open ${esc(file.name)}">▶</button></div><div class="project-meta"><span class="project-name">${esc(file.name)}</span><span class="project-duration">${esc(file.size)}</span></div><div class="project-updated">Saved on this device</div></article>`).join(''):'<div class="video-empty-state"><span>▷</span><strong>Your video space is ready.</strong><small>Add a clip to start an edit. It will stay on this device.</small></div>';}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2600)}
-function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='activity'?'Activity':'Documents';window.scrollTo({top:0,behavior:'smooth'});}
+function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===(view==='tool'?'documents':view)));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='tool'?$('#tool-title').textContent:'Documents';window.scrollTo({top:0,behavior:'smooth'});}
 function openTask(task){
+  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;
+  if($('.page-view.visible')?.id!=='tool-view')previousView=$('.page-view.visible')?.id.replace('-view','')||'documents';
   pendingTask=task; taskPages=[]; selectedTaskFiles=[];
-  const configs={Translate:['Translate a document','Translate text and keep each line anchored to its original page position.'],Edit:['Edit document text','Change extracted PDF text in place while the original file remains untouched.'],Convert:['Convert a file','Convert images and text to PDF, or export PDF pages as images.'],Merge:['Merge PDFs','Combine PDF pages in the order you choose.'],Split:['Split a PDF','Extract selected pages into a new PDF.']};
-  const [title,desc]=configs[task]||configs.Translate; $('#modal-title').textContent=title; $('#modal-description').textContent=desc;
+  const configs={Translate:['Translate a document','Translate the full document and review the translated pages before export.'],Edit:['Edit document text','Change extracted PDF text in place while the original file remains untouched.'],Convert:['Convert a file','Convert images and text to PDF, or export PDF pages as images.'],Merge:['Merge PDFs','Combine PDF pages in the order you choose.'],Split:['Split a PDF','Extract selected pages into a new PDF.']};
+  const [title,desc]=configs[task]||configs.Translate; $('#tool-title').textContent=title; $('#tool-description').textContent=desc;
   const accepts=task==='Translate'||task==='Edit'?'application/pdf,.pdf':task==='Merge'?'application/pdf,.pdf':task==='Split'?'application/pdf,.pdf':'.pdf,.txt,image/*';
   const multiple=task==='Merge'||task==='Convert'?'multiple':'';
-  let fields=`<div class="modal-field"><label for="task-files">${task==='Merge'?'Choose two or more PDF files':task==='Convert'?'Choose PDF, text, or image files':'Choose a PDF file'}</label><input id="task-files" type="file" accept="${accepts}" ${multiple} /><span class="field-help">Files stay in this browser tab. Nothing is uploaded.</span></div><div class="workspace-file-picker"><label for="workspace-file-picker">Or use a file already in your workspace</label><select id="workspace-file-picker" ${multiple}><option value="">Loading local files…</option></select><button class="secondary-button" id="load-workspace-files" type="button">Use selected files</button></div>`;
-  if(task==='Split') fields+=`<div class="modal-field"><label for="page-range">Pages to extract</label><input id="page-range" placeholder="e.g. 1–4, 7, 10–12" /><span class="field-help">Page numbers start at 1.</span></div>`;
-  if(task==='Convert') fields+=`<div class="modal-field"><label for="convert-format">Output</label><select id="convert-format"><option value="auto">Choose automatically</option><option value="pdf">PDF</option><option value="images">PNG page images (ZIP)</option></select></div>`;
-  if(task==='Translate') fields+=`<div class="language-pair"><div class="modal-field"><label for="source-language">Translate from</label><select id="source-language"><option value="en">English</option><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div><div class="language-arrow">→</div><div class="modal-field"><label for="target-language">Translate to</label><select id="target-language"><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option><option value="en">English</option></select></div></div><div class="position-note">✧ <span>Text is redrawn at the same page coordinates. The translated PDF is image-backed to keep non-Latin scripts and layout intact.</span></div><button class="secondary-button" id="translate-lines" type="button">Translate extracted lines</button>`;
+  let fields=`<div class="tool-field"><label for="task-files">${task==='Merge'?'Choose two or more PDF files':task==='Convert'?'Choose PDF, text, or image files':'Choose a PDF file'}</label><input id="task-files" type="file" accept="${accepts}" ${multiple} /><span class="field-help">Files stay on this device. Nothing is uploaded.</span></div><div class="workspace-file-picker"><label for="workspace-file-picker">Or use a file already in your workspace</label><select id="workspace-file-picker" ${multiple}><option value="">Loading local files…</option></select><button class="secondary-button" id="load-workspace-files" type="button">Use selected files</button></div>`;
+  if(task==='Split') fields+=`<div class="tool-field"><label for="page-range">Pages to extract</label><input id="page-range" placeholder="e.g. 1–4, 7, 10–12" /><span class="field-help">Page numbers start at 1.</span></div>`;
+  if(task==='Convert') fields+=`<div class="tool-field"><label for="convert-format">Output</label><select id="convert-format"><option value="auto">Choose automatically</option><option value="pdf">PDF</option><option value="images">PNG page images (ZIP)</option></select></div>`;
+  if(task==='Translate') fields+=`<div class="language-pair"><div class="tool-field"><label for="source-language">Translate from</label><select id="source-language"><option value="en">English</option><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div><div class="language-arrow">→</div><div class="tool-field"><label for="target-language">Translate to</label><select id="target-language"><option value="ja">Japanese</option><option value="es">Spanish</option><option value="fr">French</option><option value="hi">Hindi</option><option value="ta">Tamil</option><option value="en">English</option></select></div></div><div class="position-note">✧ <span>Translate the document page by page, then compare full-page previews before downloading.</span></div>`;
   if(task==='Edit') fields+=`<div class="position-note">✧ <span>Changing text keeps its original anchor. The edited PDF is image-backed to preserve visual fidelity.</span></div>`;
   if(task==='Edit'||task==='Translate') fields+=`<div id="line-editor" class="line-editor" hidden></div>`;
-  $('#modal-content').innerHTML=fields;
-  $('#modal-cta').innerHTML=task==='Merge'?'Merge PDFs <span>↗</span>':task==='Split'?'Extract pages <span>↗</span>':task==='Translate'?'Export translated PDF <span>↗</span>':task==='Edit'?'Export edited PDF <span>↗</span>':'Convert and download <span>↗</span>';
+  $('#tool-content').innerHTML=fields;
+  $('#tool-cta').innerHTML=task==='Merge'?'Merge PDFs <span>↗</span>':task==='Split'?'Extract pages <span>↗</span>':task==='Translate'?'Translate document <span>↗</span>':task==='Edit'?'Export edited PDF <span>↗</span>':'Convert and download <span>↗</span>';
+  $('#tool-cta').disabled=task==='Translate';
   $('#task-files').addEventListener('change',loadTaskFiles);
   $('#load-workspace-files').addEventListener('click',loadWorkspaceSelection);
+  if(task==='Translate')[$('#source-language'),$('#target-language')].forEach(select=>select.addEventListener('change',discardTranslationResult));
   populateWorkspacePicker(task);
-  if(task==='Translate') $('#translate-lines').addEventListener('click',translateCurrentLines);
-  $('#modal-backdrop').hidden=false; document.body.style.overflow='hidden';
+  setView('tool');
 }
 async function loadTaskFiles(event){
+  discardTranslationResult();
   selectedTaskFiles=[...event.target.files];
+  if(pendingTask==='Translate')$('#tool-cta').disabled=true;
   await addFiles(selectedTaskFiles);
   await analyzeTaskFiles();
+  if(pendingTask==='Translate')$('#tool-cta').disabled=!selectedTaskFiles.length;
 }
 async function populateWorkspacePicker(task){
   const select=$('#workspace-file-picker');if(!select)return;
@@ -43,43 +44,84 @@ async function populateWorkspacePicker(task){
     const records=await WorkspaceStore.list(),isPdfOnly=['Edit','Translate','Split','Merge'].includes(task);
     const eligible=records.filter(record=>{const name=record.name.toLowerCase(),isPdf=name.endsWith('.pdf'),isVideo=record.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/.test(name);return isPdfOnly?isPdf:task==='Convert'?!isVideo:true});
     select.innerHTML=eligible.length?eligible.map(record=>`<option value="${esc(record.id)}">${esc(record.name)} · ${record.size>1048576?`${(record.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(record.size/1024))} KB`}</option>`).join(''):'<option value="">No saved files yet</option>';
-  }catch{select.innerHTML='<option value="">Local storage is unavailable</option>'}
+    select.closest('.workspace-file-picker').hidden=!eligible.length;
+  }catch{select.closest('.workspace-file-picker').hidden=true}
 }
 async function loadWorkspaceSelection(){
   const select=$('#workspace-file-picker'),ids=[...select.selectedOptions].map(option=>option.value).filter(Boolean);
   if(!ids.length){toast('Choose a saved file first.');return}
-  try{const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);await analyzeTaskFiles();toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
+  try{discardTranslationResult();const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);if(pendingTask==='Translate')$('#tool-cta').disabled=true;await analyzeTaskFiles();if(pendingTask==='Translate')$('#tool-cta').disabled=!selectedTaskFiles.length;toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
 }
 async function analyzeTaskFiles(){
   if(!selectedTaskFiles.length)return;
   if((pendingTask==='Edit'||pendingTask==='Translate')&&selectedTaskFiles.length===1){
-    try{taskPages=await DocumentEngine.inspectPdf(selectedTaskFiles[0]);renderLineEditor();toast(`Found text on ${taskPages.length} page${taskPages.length===1?'':'s'}.`)}catch(error){toast(error.message)}
+    try{taskPages=await DocumentEngine.inspectPdf(selectedTaskFiles[0]);if(pendingTask==='Translate')await renderTranslationPreview(selectedTaskFiles[0]);else await renderVisualPdfEditor(selectedTaskFiles[0]);toast(`Document ready · ${taskPages.length} page${taskPages.length===1?'':'s'}.`)}catch(error){toast(error.message)}
   } else toast(`${selectedTaskFiles.length} file${selectedTaskFiles.length===1?'':'s'} ready.`);
 }
-function renderLineEditor(){
-  const root=$('#line-editor'); if(!root)return;
-  const total=taskPages.reduce((n,p)=>n+p.lines.length,0);
-  const needsOcr=taskPages.some(page=>!page.lines.length);
-  const ocrPanel='<div class="position-note">Some pages have no selectable text. Run local OCR on those pages to include them in editing and translation.</div><div class="ocr-controls"><select id="ocr-language" aria-label="OCR language"><option value="eng">English</option><option value="hin">Hindi</option><option value="tam">Tamil</option><option value="jpn">Japanese</option><option value="spa">Spanish</option><option value="fra">French</option></select><button class="secondary-button" id="run-ocr" type="button">Run OCR on scanned pages</button><span id="ocr-progress" class="field-help"></span></div>';
-  if(!total){root.hidden=false;root.innerHTML=ocrPanel;$('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);return}
-  root.hidden=false;
-  root.innerHTML=(needsOcr?ocrPanel:'')+`<div class="editor-heading"><strong>${total} positioned text lines</strong><span>Edit a line or translate all</span></div>`+taskPages.map((page,index)=>`<details class="editor-page" ${index===0?'open':''}><summary>Page ${index+1} <span>${page.lines.length} lines</span></summary><div class="editor-lines">${page.lines.map((line,i)=>{const flat=taskPages.slice(0,index).reduce((n,p)=>n+p.lines.length,0)+i;return `<label class="editor-line"><span>${esc(line.text.slice(0,36))}${line.text.length>36?'…':''}</span><textarea data-line-index="${flat}" rows="2">${esc(line.edited??line.text)}</textarea></label>`}).join('')}</div></details>`).join('');
-  if(needsOcr)$('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
+function ocrPanel(){return '<div class="position-note">Some pages are scans. Read them with OCR to make the text editable and translatable.</div><div class="ocr-controls"><select id="ocr-language" aria-label="OCR language"><option value="eng">English</option><option value="hin">Hindi</option><option value="tam">Tamil</option><option value="jpn">Japanese</option><option value="spa">Spanish</option><option value="fra">French</option></select><button class="secondary-button" id="run-ocr" type="button">Read scanned pages</button><span id="ocr-progress" class="field-help"></span></div>'}
+async function renderVisualPdfEditor(file){
+  const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Opening pages for editing…</span></div>';
+  const preview=await DocumentEngine.renderPdfPages(file,0.55,80),old=translationPreviews.source;
+  old?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
+  translationPreviews.source={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
+  const needsOcr=taskPages.some(page=>!page.lines.length),offsets=[];let cursor=0;
+  for(const page of taskPages){offsets.push(cursor);cursor+=page.lines.length}
+  const pages=preview.pages.map((image,index)=>{
+    const page=taskPages[index],width=page?.width||1,height=page?.height||1;
+    const fields=(page?.lines||[]).map((line,lineIndex)=>{const top=Math.max(0,Math.min(99,(height-line.y-line.height*.9)/height*100)),left=Math.max(0,Math.min(99,line.x/width*100)),boxWidth=Math.max(.8,Math.min(100-left,line.width/width*100)),boxHeight=Math.max(.8,Math.min(16,line.height/height*150)),fontSize=Math.max(4,Math.min(14,line.size*.55));return `<textarea class="page-text-edit" aria-label="Edit page ${index+1} text" data-line-index="${offsets[index]+lineIndex}" rows="1" spellcheck="false" style="left:${left}%;top:${top}%;width:${boxWidth}%;height:${boxHeight}%;font-size:${fontSize}px">${esc(line.edited??line.text)}</textarea>`}).join('');
+    return `<figure class="edit-document-page"><div class="edit-page-canvas" style="aspect-ratio:${width}/${height}"><img src="${image.url}" alt="Page ${index+1}" loading="lazy" />${fields}</div><figcaption>PAGE ${String(index+1).padStart(2,'0')} <span>${page?.lines.length||0} editable text areas</span></figcaption></figure>`;
+  }).join('');
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>Edit directly on the page</strong><span>Click a text area to change it. Your edits stay anchored to the same page position.</span></div></div>${needsOcr?ocrPanel():''}<div class="edit-document-grid">${pages}</div>${preview.total>preview.pages.length?`<div class="preview-limit-note">Editing preview shows ${preview.pages.length} of ${preview.total} pages. The remaining pages will stay unchanged in the export.</div>`:''}`;
+  if(needsOcr)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
+}
+function drawTranslationPreview(mode){
+  const root=$('#translation-page-view'),preview=translationPreviews[mode];if(!root||!preview)return;
+  root.innerHTML=preview.pages.map(page=>`<figure class="document-page-card"><img src="${page.url}" alt="${mode==='source'?'Original':'Translated'} document page ${page.number}" loading="lazy" /><figcaption><span>PAGE ${String(page.number).padStart(2,'0')}</span><span>${mode==='source'?'Original':'Translated'}</span></figcaption></figure>`).join('')+(preview.total>preview.pages.length?`<div class="preview-limit-note">Previewing the first ${preview.pages.length} of ${preview.total} pages. The full document is included in translation.</div>`:'');
+  $$('.document-preview-tab').forEach(button=>button.classList.toggle('active',button.dataset.documentPreview===mode));
+}
+async function renderTranslationPreview(file){
+  const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Preparing full-page document preview…</span></div>';
+  const preview=await DocumentEngine.renderPdfPages(file);
+  const mode=translatedDocument?'translated':'source',old=translationPreviews[mode];
+  old?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
+  translationPreviews[mode]={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
+  const hasScannedPages=taskPages.some(page=>!page.lines.length),ocr=hasScannedPages?ocrPanel():'';
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs"><button type="button" class="document-preview-tab active" data-document-preview="source">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" ${translatedDocument?'':'disabled'}>Translated</button></div></div>${ocr}<div class="document-page-grid" id="translation-page-view"></div>`;
+  root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{if(translationPreviews[button.dataset.documentPreview])drawTranslationPreview(button.dataset.documentPreview)}));
+  if(hasScannedPages)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
+  drawTranslationPreview(translatedDocument?'translated':'source');
+}
+function discardTranslationResult(){
+  if(pendingTask!=='Translate')return;
+  translationPreviews.translated?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
+  translationPreviews.translated=null;translatedDocument=null;
+  const tab=$('[data-document-preview="translated"]');if(tab)tab.disabled=true;
+  if(translationPreviews.source)drawTranslationPreview('source');
+  $('#tool-cta').innerHTML='Translate document <span>↗</span>';
 }
 async function runOcrOnCurrentPdf(){
   if(!selectedTaskFiles[0]){toast('Choose a PDF first.');return}
   const button=$('#run-ocr'),progress=$('#ocr-progress');button.disabled=true;button.textContent='Starting OCR…';
-  try{taskPages=await DocumentEngine.ocrPdf(selectedTaskFiles[0],$('#ocr-language').value,message=>{if(message.status==='recognizing text')button.textContent=`Reading pages ${Math.round(message.progress*100)}%…`;else if(message.status)button.textContent=`${message.status}…`},taskPages);renderLineEditor();const total=taskPages.reduce((n,p)=>n+p.lines.length,0);toast(total?`OCR found ${total} text lines. Review them before export.`:'OCR could not find readable text in this file.');}
+  try{taskPages=await DocumentEngine.ocrPdf(selectedTaskFiles[0],$('#ocr-language').value,message=>{if(message.status==='recognizing text')button.textContent=`Reading pages ${Math.round(message.progress*100)}%…`;else if(message.status)button.textContent=`${message.status}…`},taskPages);if(pendingTask==='Translate')await renderTranslationPreview(selectedTaskFiles[0]);else await renderVisualPdfEditor(selectedTaskFiles[0]);const total=taskPages.reduce((n,p)=>n+p.lines.length,0);toast(total?`OCR is ready · ${total} text lines found across the pages.`:'OCR could not find readable text in this file.');}
   catch(error){progress.textContent=error.message;toast(error.message)}finally{const retry=$('#run-ocr');if(retry){retry.disabled=false;retry.textContent='Run OCR on this PDF'}}
 }
 function readEditedLines(){let index=0;for(const page of taskPages)for(const line of page.lines){const input=$(`[data-line-index="${index++}"]`);if(input)line.edited=input.value}}
 async function translateCurrentLines(){
-  if(!taskPages.length){toast('Choose a text-based PDF first.');return}
-  readEditedLines(); const button=$('#translate-lines');button.disabled=true;button.textContent='Translating…';
-  try{await DocumentEngine.translateLines(taskPages,$('#source-language').value,$('#target-language').value,(done,total)=>{if(done%5===0||done===total)button.textContent=`Translating ${done}/${total}…`});renderLineEditor();toast('Translation is ready to review.')}catch(error){toast(error.message)}finally{button.disabled=false;button.textContent='Translate extracted lines'}
+  if(!taskPages.length||!selectedTaskFiles[0]){toast('Choose a PDF first.');return}
+  if(!taskPages.some(page=>page.lines.length)){toast('Run OCR on the scanned pages before translating.');return}
+  readEditedLines();const button=$('#tool-cta');button.disabled=true;
+  try{
+    await DocumentEngine.translateLines(taskPages,$('#source-language').value,$('#target-language').value,(done,total)=>{button.textContent=`Translating document · ${Math.round(done/Math.max(1,total)*100)}%`});
+    button.textContent='Composing translated pages…';
+    translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true);
+    await renderTranslationPreview(translatedDocument.blob);
+    const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
+    button.innerHTML='Download translated PDF <span>↗</span>';
+    toast('Translated document ready · review the page preview before downloading.');
+  }catch(error){toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>'}
 }
 async function performCurrentTask(){
-  const button=$('#modal-cta');button.disabled=true;const label=button.textContent;button.textContent='Working…';
+  const button=$('#tool-cta');button.disabled=true;const label=button.textContent;button.textContent='Working…';
   try{
     if(pendingTask==='Merge') toast(await DocumentEngine.mergePdfs(selectedTaskFiles));
     else if(pendingTask==='Split'){if(!selectedTaskFiles[0])throw new Error('Choose a PDF first.');toast(await DocumentEngine.splitPdf(selectedTaskFiles[0],$('#page-range').value))}
@@ -90,13 +132,16 @@ async function performCurrentTask(){
       else if(selectedTaskFiles.every(f=>f.type.startsWith('image/')))toast(await DocumentEngine.imagesToPdf(selectedTaskFiles));
       else if(selectedTaskFiles[0].name.toLowerCase().endsWith('.txt'))toast(await DocumentEngine.textToPdf(selectedTaskFiles[0]));
       else throw new Error('This conversion is not available for that format yet. Try PDF, TXT, PNG, or JPEG.');
-    } else if(pendingTask==='Edit'||pendingTask==='Translate'){
+    } else if(pendingTask==='Translate'){
+      if(!translatedDocument){button.disabled=false;await translateCurrentLines();return}
+      DocumentEngine.download(translatedDocument.blob,translatedDocument.filename);toast(translatedDocument.overflowLines?`Translated PDF downloaded. Review ${translatedDocument.overflowLines} long line${translatedDocument.overflowLines===1?'':'s'} for fit.`:'Translated PDF downloaded.');
+    } else if(pendingTask==='Edit'){
       if(!selectedTaskFiles[0]||!taskPages.length)throw new Error('Choose a text-based PDF first.');readEditedLines();
-      const longLines=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages);toast(longLines?`PDF downloaded. Review ${longLines} long line${longLines===1?'':'s'} for fit.`:pendingTask==='Translate'?'Translated PDF downloaded.':'Edited PDF downloaded.');
+      const longLines=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages);toast(longLines?`PDF downloaded. Review ${longLines} long line${longLines===1?'':'s'} for fit.`:'Edited PDF downloaded.');
     }
-  }catch(error){toast(error.message||'Could not complete this operation.')}finally{button.disabled=false;button.innerHTML=label}
+  }catch(error){toast(error.message||'Could not complete this operation.')}finally{button.disabled=false;button.innerHTML=pendingTask==='Translate'&&translatedDocument?'Download translated PDF <span>↗</span>':label}
 }
-function closeModal(){$('#modal-backdrop').hidden=true;document.body.style.overflow=''}
+function closeTool(){previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];setView(previousView||'documents')}
 async function addFiles(fileList,kind){const incoming=[...fileList];if(!incoming.length)return;let saved=0;for(const file of incoming){const ext=(file.name.split('.').pop()||'file').toLowerCase();let record;try{record=await WorkspaceStore.save(file);saved++}catch(error){toast(`${file.name} is available until this tab closes; local storage could not save it.`)}files.unshift({id:record?.id,name:file.name,ext:ext.toUpperCase().slice(0,5),size:file.size>1048576?`${(file.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(file.size/1024))} KB`,date:'Just now',kind:kind||(['mp4','mov','webm'].includes(ext)?'video':'document'),people:['KP'],tone:iconTypes[ext]||'docx',file});}renderFiles();toast(`${incoming.length} ${incoming.length===1?'file':'files'} added${saved?` · ${saved} saved on this device`:''}`);}
 async function restoreWorkspaceFiles(){try{const records=await WorkspaceStore.list();const restored=records.map(record=>{const ext=(record.name.split('.').pop()||'file').toLowerCase();return{id:record.id,name:record.name,ext:ext.toUpperCase().slice(0,5),size:record.size>1048576?`${(record.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(record.size/1024))} KB`,date:'Saved locally',kind:record.type.startsWith('video/')?'video':'document',people:['KP'],tone:iconTypes[ext]||'docx',file:record.file}});files=[...restored,...files.filter(file=>!file.id||!restored.some(record=>record.id===file.id))];renderFiles()}catch{}}
 function showSearch(){const el=$('#search-overlay');el.hidden=false;setTimeout(()=>$('#search-input').focus(),25);renderSearch('')}
@@ -107,13 +152,14 @@ $$('[data-task]').forEach(b=>b.addEventListener('click',()=>openTask(b.dataset.t
 $$('.filter-tab[data-filter]').forEach(b=>b.addEventListener('click',()=>{$$('.filter-tab[data-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');activeFilter=b.dataset.filter;renderFiles()}));
 $('#upload-button').addEventListener('click',()=>$('#file-input').click());$('#browse-button').addEventListener('click',()=>$('#file-input').click());$('#file-input').addEventListener('change',e=>{addFiles(e.target.files);e.target.value=''});
 $('#video-upload').addEventListener('click',()=>$('#video-input').click());$('#video-input').addEventListener('change',e=>{const selected=[...e.target.files];addFiles(selected,'video');setView('videos');if(selected[0])TransformoVideoEditor.open(selected[0]);e.target.value=''});
+$('#video-projects').addEventListener('click',e=>{const button=e.target.closest('[data-open-video-index]');if(!button)return;const file=files.filter(item=>item.kind==='video')[Number(button.dataset.openVideoIndex)];if(file)TransformoVideoEditor.open(file.file)});
 ['dragenter','dragover'].forEach(name=>$('#drop-zone').addEventListener(name,e=>{e.preventDefault();$('#drop-zone').classList.add('drag-over')}));['dragleave','drop'].forEach(name=>$('#drop-zone').addEventListener(name,e=>{e.preventDefault();$('#drop-zone').classList.remove('drag-over')}));$('#drop-zone').addEventListener('drop',e=>addFiles(e.dataTransfer.files));
-$('#modal-close').addEventListener('click',closeModal);$('#modal-backdrop').addEventListener('click',e=>{if(e.target===$('#modal-backdrop'))closeModal()});$('#modal-cta').addEventListener('click',performCurrentTask);
-$('#all-tools').addEventListener('click',()=>openTask('Translate'));$('#search-trigger').addEventListener('click',showSearch);$('#search-input').addEventListener('input',e=>renderSearch(e.target.value));$('#search-overlay').addEventListener('click',e=>{if(e.target===$('#search-overlay'))$('#search-overlay').hidden=true});$('#search-results').addEventListener('click',e=>{const b=e.target.closest('[data-search]');if(!b)return;const task=b.dataset.search.split(' ')[0];if(['Translate','Edit','Convert','Merge','Split'].includes(task)){ $('#search-overlay').hidden=true;openTask(task)}else if(task==='Video'){$('#search-overlay').hidden=true;setView('videos')}else{$('#search-overlay').hidden=true;toast(`Opening ${b.dataset.search}`)}});
-$('#start-editing').addEventListener('click',()=>$('#video-input').click());$$('[data-go-documents]').forEach(b=>b.addEventListener('click',()=>setView('documents')));$('#video-projects').innerHTML=['Sunday in the city','Soft focus — launch film','A place to breathe'].map((n,i)=>`<article class="video-project-card"><div class="project-thumb ${i===1?'thumb-two':i===2?'thumb-three':''}"><button class="project-play">▶</button></div><div class="project-meta"><span class="project-name">${n}</span><span class="project-duration">${i===0?'01:42':i===1?'00:38':'02:16'}</span></div><div class="project-updated">Edited ${i===0?'2 hours ago':i===1?'Yesterday':'Oct 22'}</div></article>`).join('');
+$('#tool-back').addEventListener('click',closeTool);$('#tool-cta').addEventListener('click',performCurrentTask);
+$('#all-tools').addEventListener('click',()=>$('#tool-section').scrollIntoView({behavior:'smooth',block:'start'}));$('#search-trigger').addEventListener('click',showSearch);$('#search-input').addEventListener('input',e=>renderSearch(e.target.value));$('#search-overlay').addEventListener('click',e=>{if(e.target===$('#search-overlay'))$('#search-overlay').hidden=true});$('#search-results').addEventListener('click',e=>{const b=e.target.closest('[data-search]');if(!b)return;const task=b.dataset.search.split(' ')[0];if(['Translate','Edit','Convert','Merge','Split'].includes(task)){ $('#search-overlay').hidden=true;openTask(task)}else if(task==='Video'){$('#search-overlay').hidden=true;setView('videos')}else{$('#search-overlay').hidden=true;toast(`Opening ${b.dataset.search}`)}});
+$('#start-editing').addEventListener('click',()=>$('#video-input').click());$$('[data-go-documents]').forEach(b=>b.addEventListener('click',()=>setView('documents')));
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();showSearch()}
-  if(e.key==='Escape'){closeModal();$('#search-overlay').hidden=true}
+  if(e.key==='Escape'){if($('#tool-view').classList.contains('visible'))closeTool();$('#search-overlay').hidden=true}
   if(e.key.toLowerCase()==='u'&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)&&!e.metaKey&&!e.ctrlKey)$('#file-input').click();
 });
 renderFiles();restoreWorkspaceFiles();
