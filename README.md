@@ -40,7 +40,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate related lines together as positioned text blocks with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
-| **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, add a caption overlay, and export one WebM sequence in the browser. |
 
 ### Small details, big difference
 
@@ -75,7 +75,7 @@ The next step is to expand format coverage and make the layout-aware workflows m
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
-5. **Grow the video studio.** Add multiple timeline clips, timestamped captions, translated subtitle tracks, and a wider range of export formats.
+5. **Grow the video studio.** Add timestamped captions, translated subtitle tracks, and a wider range of export formats.
 6. **Keep privacy visible.** Prefer local processing where practical, explain when a task needs a server, and make file retention clear.
 
 For layout-preserving translation, **“preserve positions” should mean preserving each text block’s anchor and page geometry, then adapting font size or line breaks inside that block**. Some translations are longer than their source; the product should surface those collisions for a human to resolve.
@@ -95,14 +95,14 @@ transformoDocs/
 ├── workspace.css       # Saved-file selection and workspace controls
 ├── feedback.css        # Toast feedback above dialogs
 ├── tool-workspace.css  # Full-page document tools and page previews
-├── video-engine.js     # Local trim, caption, and WebM export
+├── video-engine.js     # Local multi-clip timeline, trim, captions, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
 ```
 
 ## 🛠 Current prototype boundaries
 
-PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
+PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and multi-clip video timeline export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
 - PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
 - Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
@@ -112,7 +112,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
-- Video export creates a single WebM clip with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Multi-clip editing, multiple caption timings, and MP4 export are not implemented yet.
+- Video export joins trimmed timeline clips into a WebM sequence with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Timed caption tracks, transitions, and MP4 export are not implemented yet.
 - DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.
 - Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
