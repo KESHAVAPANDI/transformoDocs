@@ -10,6 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="operations.css" />
+    <link rel="stylesheet" href="video.css" />
   </head>
   <body>
     <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
@@ -67,6 +69,11 @@
     <div class="toast" id="toast" role="status"></div>
     <div class="modal-backdrop" id="modal-backdrop" hidden><section class="task-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close" id="modal-close" aria-label="Close">×</button><div class="modal-icon">✳</div><div class="eyebrow">YOUR NEXT TRANSFORMATION</div><h2 id="modal-title">Translate a document</h2><p id="modal-description">Keep your layout, spacing, and visual rhythm while every word finds a new language.</p><div class="modal-content" id="modal-content"></div><button class="primary-button modal-cta" id="modal-cta">Choose a file <span>↗</span></button><div class="modal-footnote">Your original stays untouched · Private by design</div></section></div>
     <div class="search-overlay" id="search-overlay" hidden><div class="search-box glass-panel"><span>⌕</span><input id="search-input" placeholder="Search files, tools, and more..." /><kbd>ESC</kbd><div class="search-hint">Try <b>translate</b>, <b>merge</b>, or a file name</div><div id="search-results"></div></div></div>
-    <script src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <script src="document-engine.js" defer></script>
+    <script src="app.js" defer></script>
+    <script src="video-engine.js" defer></script>
   </body>
 </html>

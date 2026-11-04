@@ -28,51 +28,51 @@ Documents and videos are more than files. They are carefully arranged ideas. Tra
 
 Translate a page and its text should stay in place. Edit a paragraph and the rest of the layout should remain composed. Move from a document to a video project without starting over in an entirely different-feeling tool.
 
-Transformo is an early, interactive product prototype that makes this direction tangible.
+Transformo is a local-first web workspace for common document operations and a first cut at the video studio.
 
 ## ✨ The experience
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | A home for your files, with quick paths to editing, conversion, merging, splitting, and translation. |
-| **Layout-aware translation** | Choose source and target languages with a visible “layout lock” concept that keeps text blocks anchored to their original geometry. |
-| **Video studio** | A companion space for footage, cuts, subtitles, audio polish, and future video translation. |
+| **Documents** | Merge PDFs, extract selected pages, convert images and text to PDF, and export PDF pages as PNGs. |
+| **Layout-aware editing and translation** | Extract PDF text into positioned lines, review or edit each line, translate with the browser Translator API when available, and render replacement text at the same page coordinates. |
+| **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
 | **Activity** | A natural home for recent transformations and project history as the product grows. |
 
 ### Small details, big difference
 
 - **A workspace that feels like one place.** A translucent, layered interface, soft color, and restrained motion give the tools room to breathe.
-- **A quick way in.** Drag files into the workspace, browse for them, or use the tool cards to start a focused task.
+- **A quick way in.** Drag files into the workspace, browse for them, or use the tool cards to start a focused task. Merge and split operations use real PDFs and create downloadable results.
 - **Search that moves with you.** Find recent files and jump straight into a tool with `⌘ K` (or `Ctrl K`).
 - **Responsive by design.** The desktop sidebar becomes a compact navigation rail, then a bottom bar on small screens.
 - **Reduced-motion support.** Interface animation respects the operating system preference.
 
 ## 🚀 Getting started
 
-Transformo is currently a static front-end prototype: no package manager or build step is required.
+Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, and JSZip from public CDNs. Start it from a local web server so browser file APIs and the optional Translator API can run:
 
 ```bash
 git clone https://github.com/KESHAVAPANDI/transformoDocs.git
 cd transformoDocs
 ```
 
-Open `index.html` in a browser, or start a small local server:
+Then open `http://localhost:8000` in a recent Chrome or Edge browser. You can also use VS Code's Live Server extension.
 
 ```bash
 python -m http.server 8000
 ```
 
-Then visit [http://localhost:8000](http://localhost:8000).
+Internet access is needed to load the PDF libraries. The selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
 
 ## 🧭 Where Transformo can go
 
-The next step is to turn the visual promise into real, dependable document operations. A practical path could look like this:
+The next step is to expand format coverage and make the layout-aware workflows more robust. A practical path could look like this:
 
-1. **Build a file pipeline.** Add real PDF and Office format parsing, page previews, export, merge, and split operations.
-2. **Preserve layout with structure.** Extract each page into positioned text and image blocks; translate text inside those blocks, measure the new content, and flag overflow for review instead of silently shifting the page.
+1. **Add Office formats.** Read and write DOCX, PPTX, and spreadsheets while preserving styles, tables, images, and page geometry.
+2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Add OCR for scans.** Detect text and its bounding boxes on image-only pages before editing or translation.
-5. **Grow the video studio.** Start with local video preview, timeline trims, subtitles, and export; add translated captions and dubbing as separate, reviewable tracks.
+5. **Grow the video studio.** Add multiple timeline clips, timestamped captions, translated subtitle tracks, and a wider range of export formats.
 6. **Keep privacy visible.** Prefer local processing where practical, explain when a task needs a server, and make file retention clear.
 
 For layout-preserving translation, **“preserve positions” should mean preserving each text block’s anchor and page geometry, then adapting font size or line breaks inside that block**. Some translations are longer than their source; the product should surface those collisions for a human to resolve.
@@ -81,15 +81,29 @@ For layout-preserving translation, **“preserve positions” should mean preser
 
 ```text
 transformoDocs/
-├── index.html   # App structure and workspace views
-├── styles.css   # Glass interface, responsive layout, and motion
-├── app.js       # Prototype interactions and sample workspace data
-└── README.md    # Project overview and direction
+├── index.html          # Workspace and editor views
+├── styles.css          # Glass interface, responsive layout, and motion
+├── operations.css      # Document/video editor styles
+├── video.css           # Video editing controls
+├── app.js              # App navigation and task workflows
+├── document-engine.js  # In-browser PDF and image/text conversion
+├── video-engine.js     # Local trim, caption, and WebM export
+├── assets/preview.svg  # README workspace illustration
+└── README.md           # Setup, features, limits, and roadmap
 ```
 
 ## 🛠 Current prototype boundaries
 
-The current interface demonstrates the product direction and interactions. File selection and drag-and-drop populate the session’s recent-files list, and the tools open guided setup panels. **Document conversion, editing, translation, merging, splitting, and video export are not connected to processing engines yet.** Uploaded file contents are not sent to a server or persisted by this prototype.
+PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned line editing/translation, and single-clip video trimming/caption export are implemented in the browser. There are deliberate limits:
+
+- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
+- Replacement text uses a neutral dark font rather than preserving every source font and color. Long translated lines are shrunk to fit and flagged for review.
+- The PDF line editor needs selectable text. Scanned PDFs need OCR, which is not wired into this version.
+- Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
+- PDF image-backed export assumes a white page background for covering replaced text. Complex rotated text, columns, and colored backgrounds need review.
+- Video export creates a single WebM clip with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Multi-clip editing, multiple caption timings, and MP4 export are not implemented yet.
+- DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.
+- Files are not uploaded or persisted between sessions. The static PDF libraries are fetched from CDNs when the app loads.
 
 ## 💡 More ideas worth exploring
 
