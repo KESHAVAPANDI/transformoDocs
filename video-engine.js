@@ -1,6 +1,6 @@
 /* Local multi-clip video editor using Canvas + MediaRecorder. */
 (() => {
-  let clips = [], activeClip = 0, exportUrl = null, audioGraph = null;
+  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null;
   const root = () => document.querySelector('#video-editor-workspace');
   const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   function notify(message) {
@@ -16,14 +16,45 @@
   function safeBase(name) { return name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-|-$/g, '') || 'transformo-video'; }
   function close() {
     const workspace = root(); if (workspace) workspace.innerHTML = '';
-    clips.forEach(clip => URL.revokeObjectURL(clip.url)); clips = []; activeClip = 0;
+    clips.forEach(clip => URL.revokeObjectURL(clip.url)); clips = []; subtitles = []; activeClip = 0;
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
+    if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     if (audioGraph) { audioGraph.destination.stream.getTracks().forEach(track => track.stop()); audioGraph.context.close(); audioGraph = null; }
     document.removeEventListener('keydown', escape);
     document.querySelector('#videos-view')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function escape(event) { if (event.key === 'Escape' && clips.length) close(); }
   function totalDuration() { return clips.reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
+  function timelineOffset(index) { return clips.slice(0, index).reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
+  function timelineTime(index, sourceTime) { const clip = clips[index]; return clip ? timelineOffset(index) + Math.max(0, Math.min(clip.end - clip.start, sourceTime - clip.start)) : 0; }
+  function subtitleAt(time) { return subtitles.find(cue => time >= cue.start && time < cue.end)?.text.trim() || ''; }
+  function updateSubtitlePreview(time = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || 0)) {
+    const preview = root()?.querySelector('#subtitle-preview'); if (!preview) return;
+    const value = subtitleAt(time); preview.textContent = value; preview.hidden = !value;
+  }
+  function renderSubtitles() {
+    const list = root()?.querySelector('#subtitle-cues'); if (!list) return;
+    list.innerHTML = subtitles.length ? subtitles.map((cue, index) => `<article class="subtitle-cue" data-subtitle-index="${index}"><header><strong>Cue ${String(index + 1).padStart(2, '0')}</strong><button type="button" data-subtitle-remove aria-label="Remove subtitle cue ${index + 1}">×</button></header><div class="subtitle-cue-times"><label>Start <input type="number" min="0" step="0.1" data-subtitle-field="start" value="${cue.start.toFixed(1)}" /></label><label>End <input type="number" min="0" step="0.1" data-subtitle-field="end" value="${cue.end.toFixed(1)}" /></label></div><textarea rows="2" data-subtitle-field="text" aria-label="Subtitle cue ${index + 1} text" placeholder="Type a subtitle…">${escapeHtml(cue.text)}</textarea></article>`).join('') : '<div class="subtitle-empty">Add a cue to place a subtitle on the timeline.</div>';
+    updateSubtitlePreview();
+  }
+  function addSubtitle() {
+    const start = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || clips[activeClip]?.start || 0), end = Math.min(totalDuration(), start + 3);
+    subtitles.push({ start, end: end > start ? end : start + 3, text: '' });
+    renderSubtitles(); root()?.querySelector(`[data-subtitle-index="${subtitles.length - 1}"] textarea`)?.focus();
+  }
+  function updateSubtitle(event) {
+    const field = event.target.closest('[data-subtitle-field]'), cue = field && subtitles[Number(field.closest('[data-subtitle-index]').dataset.subtitleIndex)]; if (!cue) return;
+    cue[field.dataset.subtitleField] = field.dataset.subtitleField === 'text' ? field.value : Math.max(0, Number(field.value) || 0);
+    updateSubtitlePreview();
+  }
+  function removeSubtitle(event) {
+    const button = event.target.closest('[data-subtitle-remove]'); if (!button) return;
+    subtitles.splice(Number(button.closest('[data-subtitle-index]').dataset.subtitleIndex), 1); renderSubtitles();
+  }
+  function srtTimestamp(seconds) {
+    const value = Math.max(0, Math.round(seconds * 1000)), hours = Math.floor(value / 3600000), minutes = Math.floor(value % 3600000 / 60000), secs = Math.floor(value % 60000 / 1000), millis = value % 1000;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
+  }
   async function addClips(files) {
     const candidates = [...files].filter(file => file.type.startsWith('video/') || /\.(mp4|mov|webm|mkv)$/i.test(file.name));
     const added = [];
@@ -53,10 +84,10 @@
     const workspace = root(); if (!workspace) return;
     workspace.innerHTML = `<section class="video-editor glass-panel" id="video-editor" aria-labelledby="video-editor-title">
       <header class="video-editor-header"><div><div class="eyebrow"><span class="live-dot video-dot"></span> LOCAL VIDEO EDITOR</div><h2 id="video-editor-title">Your video timeline</h2><p>Arrange clips, set in and out points, then export one sequence.</p></div><button class="video-back-button" id="video-editor-close" type="button">← Back to projects</button></header>
-      <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div class="video-stage-caption">Preview stays on this device.</div></div>
+      <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div id="subtitle-preview" class="subtitle-preview" hidden></div></div>
       <aside class="video-inspector"><div class="inspector-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div>
-      <div class="inspector-label caption-label">CAPTION OVERLAY</div><textarea id="video-caption" rows="3" placeholder="Optional caption for the full export…"></textarea><input id="caption-language" type="hidden" value="es" /><div class="caption-translate"><div class="caption-language-options" role="group" aria-label="Caption language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button></div><button class="secondary-button" id="translate-caption" type="button">Translate caption</button></div>
-      <div class="inspector-note">Clips render in timeline order. Export creates a new WebM file on this device.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><div id="video-editor-status" class="video-editor-status">Add clips to start your edit.</div></aside></div>
+      <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-language" type="hidden" value="es" /><div class="caption-language-options" role="group" aria-label="Subtitle translation language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div id="subtitle-cues" class="subtitle-cues"></div>
+      <div class="inspector-note">Cues use seconds on the combined timeline. Export burns them into the video and can also download an SRT track.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">Add clips to start your edit.</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
       <div class="video-timeline"><span>◷</span><div class="timeline-rail"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
@@ -66,6 +97,7 @@
       workspace.querySelector('#video-current-time').textContent = format(video.currentTime);
       const clip = clips[activeClip], span = clip ? Math.max(.1, clip.end - clip.start) : 0;
       workspace.querySelector('.timeline-fill').style.width = `${clip ? Math.min(100, Math.max(0, (video.currentTime - clip.start) / span * 100)) : 0}%`;
+      updateSubtitlePreview();
     });
     workspace.querySelector('#video-editor-close').addEventListener('click', close);
     workspace.querySelector('#video-add-clips').addEventListener('click', () => workspace.querySelector('#timeline-input').click());
@@ -73,13 +105,16 @@
     workspace.querySelector('#timeline-clips').addEventListener('click', timelineAction);
     workspace.querySelector('#trim-start').addEventListener('change', updateTrim);
     workspace.querySelector('#trim-end').addEventListener('change', updateTrim);
-    workspace.querySelector('#video-caption').addEventListener('input', event => { workspace.querySelector('.video-stage-caption').textContent = event.target.value || 'Preview stays on this device.'; });
+    workspace.querySelector('#add-subtitle').addEventListener('click', addSubtitle);
+    workspace.querySelector('#subtitle-cues').addEventListener('input', updateSubtitle);
+    workspace.querySelector('#subtitle-cues').addEventListener('click', removeSubtitle);
     workspace.querySelector('#translate-caption').addEventListener('click', translateCaption);
     workspace.querySelectorAll('[data-caption-language]').forEach(button => button.addEventListener('click', () => {
       workspace.querySelector('#caption-language').value = button.dataset.captionLanguage;
       workspace.querySelectorAll('[data-caption-language]').forEach(option => option.setAttribute('aria-pressed', String(option === button)));
     }));
     workspace.querySelector('#export-video').addEventListener('click', exportVideo);
+    renderSubtitles();
     document.addEventListener('keydown', escape);
     addClips(files).catch(error => notify(error.message || 'Could not load the selected clips.'));
     workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -96,6 +131,7 @@
       });
     }
     video.currentTime = clip.start;
+    updateSubtitlePreview();
     workspace.querySelector('#active-clip-name').textContent = clip.file.name;
     workspace.querySelector('#trim-start').value = clip.start.toFixed(1); workspace.querySelector('#trim-start').max = clip.duration;
     workspace.querySelector('#trim-end').value = clip.end.toFixed(1); workspace.querySelector('#trim-end').max = clip.duration;
@@ -140,15 +176,19 @@
     if (row) rows.push(row); return rows;
   }
   async function translateCaption() {
-    const workspace = root(), field = workspace?.querySelector('#video-caption'), button = workspace?.querySelector('#translate-caption');
-    if (!field?.value.trim()) { notify('Add a caption to translate first.'); return; }
+    const workspace = root(), button = workspace?.querySelector('#translate-caption'), cues = subtitles.filter(cue => cue.text.trim());
+    if (!cues.length) { notify('Add subtitle text before translating the track.'); return; }
     if (!window.Translator) { notify('This browser does not provide on-device translation.'); return; }
-    button.disabled = true; button.textContent = 'Translating…';
+    button.disabled = true; button.textContent = 'Checking language…';
     try {
-      const targetLanguage = workspace.querySelector('#caption-language').value, translator = await Translator.create({ sourceLanguage: 'en', targetLanguage });
-      field.value = await translator.translate(field.value); translator.destroy?.(); field.dispatchEvent(new Event('input', { bubbles: true })); notify('Translated caption is ready to review.');
+      const targetLanguage = workspace.querySelector('#caption-language').value, availability = await Translator.availability({ sourceLanguage: 'en', targetLanguage });
+      if (availability === 'unavailable') throw new Error(`The browser has no English → ${targetLanguage} translation model.`);
+      const translator = await Translator.create({ sourceLanguage: 'en', targetLanguage });
+      try { for (let index = 0; index < cues.length; index++) { button.textContent = `Translating ${index + 1}/${cues.length}…`; cues[index].text = await translator.translate(cues[index].text); } }
+      finally { translator.destroy?.(); }
+      renderSubtitles(); notify('Translated subtitle track is ready to review.');
     } catch (error) { notify(error.message || 'Translation could not start.'); }
-    finally { button.disabled = false; button.textContent = 'Translate caption'; }
+    finally { button.disabled = false; button.textContent = 'Translate track'; }
   }
   function loadVideo(video, clip) {
     if (video.src === clip.url && video.readyState >= 1) return Promise.resolve();
@@ -176,7 +216,11 @@
     if (!window.MediaRecorder || !canvas.captureStream) { notify('Video export is not supported in this browser. Try a recent Chrome or Edge.'); return; }
     const exportClips = clips.map(clip => ({ ...clip }));
     if (exportClips.some(clip => clip.end <= clip.start)) { notify('Each clip needs an out point after its in point.'); return; }
-    const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), caption = workspace.querySelector('#video-caption').value.trim();
+    const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), subtitleLink = workspace.querySelector('#download-subtitles');
+    if (subtitles.some(cue => cue.end <= cue.start)) { notify('Each subtitle cue needs an end time after its start time.'); return; }
+    if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
+    if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
+    workspace.querySelector('#download-video').hidden = true; subtitleLink.hidden = true;
     button.disabled = true; status.textContent = 'Preparing a local timeline render…';
     let stream, recorder, graph;
     try {
@@ -190,25 +234,30 @@
       recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); const chunks = [];
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       const finished = new Promise((resolve, reject) => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || 'video/webm' })); recorder.onerror = () => reject(new Error('The browser could not finish the video render.')); });
-      const draw = () => {
+      const draw = (timelinePosition = 0) => {
         const w = canvas.width, h = canvas.height; context.fillStyle = '#111'; context.fillRect(0, 0, w, h);
         if (video.readyState >= 2 && video.videoWidth) { const scale = Math.min(w / video.videoWidth, h / video.videoHeight), dw = video.videoWidth * scale, dh = video.videoHeight * scale; context.drawImage(video, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+        const caption = subtitleAt(timelinePosition);
         if (caption) { context.font = '600 37px Arial, sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; const rows = wrapText(context, caption, w * .8), lineHeight = 47, blockHeight = rows.length * lineHeight; context.fillStyle = 'rgba(12,13,18,.68)'; context.fillRect(w * .08, h - blockHeight - 76, w * .84, blockHeight + 34); context.fillStyle = '#fff'; rows.forEach((line, index) => context.fillText(line, w / 2, h - 58 - blockHeight / 2 + index * lineHeight, w * .8)); }
       };
       recorder.start(250); status.textContent = `Rendering ${exportClips.length} clip${exportClips.length === 1 ? '' : 's'} in timeline order…`;
+      let timelineCursor = 0;
       for (let index = 0; index < exportClips.length; index++) {
         const clip = exportClips[index]; await loadVideo(video, clip);
         video.pause(); await seekVideo(video, clip.start);
-        draw(); await video.play();
+        draw(timelineCursor); await video.play();
         await new Promise(resolve => {
-          const tick = () => { draw(); if (video.currentTime >= clip.end || video.ended) { video.pause(); resolve(); } else requestAnimationFrame(tick); };
+          const tick = () => { draw(timelineCursor + Math.max(0, video.currentTime - clip.start)); if (video.currentTime >= clip.end || video.ended) { video.pause(); resolve(); } else requestAnimationFrame(tick); };
           requestAnimationFrame(tick);
         });
+        timelineCursor += clip.end - clip.start;
       }
       video.pause(); if (recorder.state !== 'inactive') recorder.stop();
       const blob = await finished; if (graph) stream.getVideoTracks().forEach(track => track.stop()); else stream.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1;
       if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = URL.createObjectURL(blob);
       const link = workspace.querySelector('#download-video'); link.href = exportUrl; link.download = `${safeBase(exportClips[0].file.name)}-transformo.webm`; link.hidden = false;
+      const srt = subtitles.filter(cue => cue.text.trim() && cue.start < totalDuration() && Math.min(cue.end, totalDuration()) > cue.start).sort((a, b) => a.start - b.start).map((cue, index) => `${index + 1}\n${srtTimestamp(cue.start)} --> ${srtTimestamp(Math.min(cue.end, totalDuration()))}\n${cue.text.trim()}`).join('\n\n');
+      if (srt) { subtitleUrl = URL.createObjectURL(new Blob([srt], { type: 'text/plain;charset=utf-8' })); subtitleLink.href = subtitleUrl; subtitleLink.download = `${safeBase(exportClips[0].file.name)}-subtitles.srt`; subtitleLink.hidden = false; }
       const duration = exportClips.reduce((sum, clip) => sum + clip.end - clip.start, 0);
       status.textContent = `Export ready · ${format(duration)} · ${(blob.size / 1048576).toFixed(1)} MB`; notify('Your edited video timeline is ready to download.');
     } catch (error) {

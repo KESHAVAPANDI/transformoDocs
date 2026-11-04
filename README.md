@@ -40,7 +40,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages in an expandable set of languages, translate related lines together as positioned text blocks with the browser Translator API when available, swap languages quickly, compare original and translated pages, and download a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. The Edit tool places editable text fields directly over the page at their original positions. |
-| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, add a caption overlay, and export one WebM sequence in the browser. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, create and translate timed subtitle cues, preview them in place, burn them into a WebM export, and download a separate SRT subtitle file. |
 
 ### Small details, big difference
 
@@ -77,7 +77,7 @@ The next step is to expand format coverage and make the layout-aware workflows m
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
-5. **Grow the video studio.** Add timestamped captions, translated subtitle tracks, and a wider range of export formats.
+5. **Grow the video studio.** Add SRT import, subtitle styling, transitions, and a wider range of export formats.
 6. **Keep privacy visible.** Prefer local processing where practical, explain when a task needs a server, and make file retention clear.
 
 For layout-preserving translation, **“preserve positions” should mean preserving each text block’s anchor and page geometry, then adapting font size or line breaks inside that block**. Some translations are longer than their source; the product should surface those collisions for a human to resolve.
@@ -115,7 +115,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
 - The translation picker follows Chrome's documented language-code list, while the chosen pair is still checked against the browser's actual model availability. The API is not available in every browser. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/).
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
-- Video export joins trimmed timeline clips into a WebM sequence with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Timed caption tracks, transitions, and MP4 export are not implemented yet.
+- Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. Subtitle translation uses the browser's built-in Translator API and translates from English. Transitions and MP4 export are not implemented yet.
 - DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.
 - Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
