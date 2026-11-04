@@ -146,16 +146,25 @@
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
     const pages = [];
     for (let number = 1; number <= pdf.numPages; number++) {
-      const page = await pdf.getPage(number), content = await page.getTextContent(), lines = new Map();
+      const page = await pdf.getPage(number), content = await page.getTextContent(), rows = [];
       for (const item of content.items) {
         if (!item.str || !item.str.trim() || !item.transform) continue;
-        const x = item.transform[4], y = item.transform[5], size = Math.max(5, Math.hypot(item.transform[0], item.transform[1]));
-        const key = Math.round(y * 2) / 2;
-        const current = lines.get(key) || { page: number - 1, x, y, size, width: 0, height: 0, parts: [] };
-        current.x = Math.min(current.x, x); current.size = Math.max(current.size, size); current.height = Math.max(current.height, item.height || size);
-        current.width = Math.max(current.width, x + (item.width || 0) - current.x); current.parts.push({ x, text: item.str }); lines.set(key, current);
+        const x = item.transform[4], y = item.transform[5], size = Math.max(5, Math.hypot(item.transform[0], item.transform[1])), width = Math.max(0, item.width || 0);
+        let row = rows.find(candidate => Math.abs(candidate.y - y) <= Math.max(1.25, size * .16));
+        if (!row) { row = { y, segments: [] }; rows.push(row); }
+        const nearby = row.segments.map(segment => {
+          const gap = x > segment.right ? x - segment.right : x + width < segment.left ? segment.left - (x + width) : 0;
+          return { segment, gap };
+        }).filter(candidate => candidate.gap <= Math.max(14, size * 2.2)).sort((a, b) => a.gap - b.gap)[0];
+        const segment = nearby?.segment || { page: number - 1, x, y, size, width: 0, height: 0, left: x, right: x, parts: [] };
+        if (!nearby) row.segments.push(segment);
+        segment.x = Math.min(segment.x, x); segment.left = Math.min(segment.left, x); segment.right = Math.max(segment.right, x + width);
+        segment.size = Math.max(segment.size, size); segment.height = Math.max(segment.height, item.height || size);
+        segment.width = Math.max(0, segment.right - segment.left); segment.parts.push({ x, text: item.str });
       }
-      pages.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], lines: [...lines.values()].map(line => ({ ...line, text: line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim() })).filter(line => line.text) });
+      const lines = rows.flatMap(row => row.segments.map(line => ({ ...line, y: row.y, text: line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim() })))
+        .filter(line => line.text).sort((a, b) => b.y - a.y || a.x - b.x);
+      pages.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], lines });
     }
     return pages;
   }
@@ -203,16 +212,37 @@
   }
 
   function supportsTranslation() { return typeof window.Translator !== 'undefined'; }
+  function groupParagraphLines(lines) {
+    const groups = [];
+    for (const line of [...lines].sort((a, b) => b.y - a.y || a.x - b.x)) {
+      const beginsListItem = /^(?:[•◦▪*-]\s|\d+[.)]\s)/.test(line.text.trim());
+      const candidates = beginsListItem ? [] : groups.map(group => {
+        const previous = group.lines[group.lines.length - 1], leading = previous.y - line.y;
+        const height = Math.max(previous.height || previous.size, line.height || line.size, 5);
+        const indent = Math.abs(line.x - group.anchorX);
+        return { group, leading, indent, score: indent + Math.abs(leading - height * 1.2) };
+      }).filter(candidate => candidate.group.lines.length < 10 && candidate.group.lines.reduce((sum, item) => sum + item.text.length, 0) < 1500 && candidate.leading >= 2 && candidate.leading <= Math.max(candidate.group.lines.at(-1).height || 0, line.height || 0, 5) * 2.2 && candidate.indent <= Math.max(18, line.size * 2.5))
+        .sort((a, b) => a.score - b.score);
+      if (candidates.length) candidates[0].group.lines.push(line);
+      else groups.push({ anchorX: line.x, lines: [line] });
+    }
+    return groups;
+  }
   async function translateLines(pages, sourceLanguage, targetLanguage, onProgress = () => {}) {
     if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. You can still edit the extracted text manually, or open Transformo in a browser that supports on-device translation.');
     const availability = await Translator.availability({ sourceLanguage, targetLanguage });
     if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
     const translator = await Translator.create({ sourceLanguage, targetLanguage });
-    let done = 0; const total = pages.reduce((count, page) => count + page.lines.length, 0);
-    for (const page of pages) for (const line of page.lines) {
-      line.edited = await translator.translate(line.text); onProgress(++done, total);
-    }
-    translator.destroy?.();
+    const blocks = pages.flatMap((page, pageIndex) => groupParagraphLines(page.lines).map((group, blockIndex) => ({ ...group, pageIndex, blockIndex })));
+    let done = 0; const total = blocks.length;
+    try {
+      for (const block of blocks) {
+        const text = block.lines.map(line => line.text).join(' ').replace(/\s+/g, ' ').trim();
+        const translated = await translator.translate(text), id = `${block.pageIndex}:${block.blockIndex}`;
+        for (const line of block.lines) { line.edited = translated; line.translationBlockId = id; line.translationText = translated; }
+        onProgress(++done, total);
+      }
+    } finally { translator.destroy?.(); }
     return pages;
   }
 
@@ -229,7 +259,59 @@
     return `rgb(${median(0)}, ${median(1)}, ${median(2)})`;
   }
 
-  async function exportPositionedPdf(file, pages, onProgress = () => {}, returnBlob = false) {
+  function wrapBlockText(ctx, value, width, language) {
+    const text = value.trim();
+    if (!text) return [];
+    const hasSpaces = /\s/.test(text);
+    let tokens;
+    if (hasSpaces) tokens = text.split(/\s+/);
+    else if (typeof Intl.Segmenter === 'function') tokens = [...new Intl.Segmenter(language, { granularity: 'word' }).segment(text)].map(part => part.segment).filter(Boolean);
+    else tokens = Array.from(text);
+    const separator = hasSpaces ? ' ' : '';
+    const result = []; let line = '';
+    for (const token of tokens) {
+      const candidate = line ? `${line}${separator}${token}` : token;
+      if (line && ctx.measureText(candidate).width > width) { result.push(line); line = ''; }
+      if (!line && ctx.measureText(token).width > width) {
+        let piece = '';
+        for (const character of Array.from(token)) {
+          if (piece && ctx.measureText(piece + character).width > width) { result.push(piece); piece = ''; }
+          piece += character;
+        }
+        line = piece;
+      } else line = line ? `${line}${separator}${token}` : token;
+    }
+    if (line) result.push(line);
+    return result;
+  }
+
+  function drawTranslatedBlock(ctx, lines, value, viewport, language) {
+    const left = Math.min(...lines.map(line => line.x)), right = Math.max(...lines.map(line => line.x + line.width));
+    const bottom = Math.min(...lines.map(line => line.y - line.height * .22)), top = Math.max(...lines.map(line => line.y + line.height * .9));
+    const corners = [[left, bottom], [left, top], [right, bottom], [right, top]].map(([x, y]) => viewport.convertToViewportPoint(x, y));
+    const x = Math.max(0, Math.min(...corners.map(point => point[0]))), y = Math.max(0, Math.min(...corners.map(point => point[1])));
+    const width = Math.min(ctx.canvas.width - x, Math.max(...corners.map(point => point[0])) - x), height = Math.min(ctx.canvas.height - y, Math.max(...corners.map(point => point[1])) - y);
+    if (width < 2 || height < 2) return true;
+    const pad = Math.max(1, Math.min(3, height * .04)), coverX = Math.max(0, x - pad), coverY = Math.max(0, y - pad);
+    const coverRight = Math.min(ctx.canvas.width, x + width + pad), coverBottom = Math.min(ctx.canvas.height, y + height + pad);
+    const background = samplePageBackground(ctx, coverX, coverY, coverRight - coverX, coverBottom - coverY);
+    ctx.fillStyle = background; ctx.fillRect(coverX, coverY, coverRight - coverX, coverBottom - coverY);
+    const baseSize = Math.max(6, lines.reduce((sum, line) => sum + line.size, 0) / lines.length * viewport.scale * .92);
+    let fontSize = baseSize, wrapped = [], lineHeight = fontSize * 1.16;
+    while (fontSize >= 6) {
+      ctx.font = `${fontSize}px Arial, sans-serif`;
+      wrapped = wrapBlockText(ctx, value, width, language);
+      lineHeight = fontSize * 1.16;
+      if (wrapped.length * lineHeight <= height + .5) break;
+      fontSize -= .5;
+    }
+    const overflow = wrapped.length * lineHeight > height + .5;
+    ctx.font = `${fontSize}px Arial, sans-serif`; ctx.fillStyle = '#171717'; ctx.textBaseline = 'top';
+    wrapped.forEach((text, index) => ctx.fillText(text, x, y + index * lineHeight, width));
+    return overflow;
+  }
+
+  async function exportPositionedPdf(file, pages, onProgress = () => {}, returnBlob = false, language = 'en') {
     requireLibraries('PDFLib');
     if (!pdfjs) throw new Error('The PDF renderer did not load.');
     const source = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise, output = await PDFDocument.create();
@@ -240,7 +322,15 @@
       const ctx = canvas.getContext('2d', { alpha: false }); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       await page.render({ canvasContext: ctx, viewport }).promise;
       const lines = pages[index]?.lines || [];
+      const renderedBlocks = new Set();
       for (const line of lines) {
+        if (line.translationBlockId) {
+          if (renderedBlocks.has(line.translationBlockId)) continue;
+          renderedBlocks.add(line.translationBlockId);
+          const blockLines = lines.filter(candidate => candidate.translationBlockId === line.translationBlockId);
+          if (drawTranslatedBlock(ctx, blockLines, line.translationText || line.edited || line.text, viewport, language)) overflowLines++;
+          continue;
+        }
         const value = (line.edited ?? line.text).trim(); if (!value) continue;
         const [left, baseline] = viewport.convertToViewportPoint(line.x, line.y);
         const width = Math.max(6, line.width * viewport.scale), height = Math.max(7, line.height * viewport.scale);

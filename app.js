@@ -133,7 +133,8 @@ async function renderTranslationPreview(file){
   old?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
   translationPreviews[mode]={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
   const hasScannedPages=taskPages.some(page=>!page.lines.length),ocr=hasScannedPages?ocrPanel():'';
-  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs"><button type="button" class="document-preview-tab active" data-document-preview="source">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" ${translatedDocument?'':'disabled'}>Translated</button></div></div>${ocr}<div class="document-page-grid" id="translation-page-view"></div>`;
+  const overflow=translatedDocument?.overflowLines?`<div class="position-note position-note-warning">${translatedDocument.overflowLines} translated text area${translatedDocument.overflowLines===1?' may':'s may'} overflow its original page region. Check the translated preview before downloading.</div>`:'';
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs"><button type="button" class="document-preview-tab active" data-document-preview="source">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" ${translatedDocument?'':'disabled'}>Translated</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
   root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{if(translationPreviews[button.dataset.documentPreview])drawTranslationPreview(button.dataset.documentPreview)}));
   if(hasScannedPages)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
   drawTranslationPreview(translatedDocument?'translated':'source');
@@ -160,11 +161,11 @@ async function translateCurrentLines(){
   try{
     await DocumentEngine.translateLines(taskPages,$('#source-language').value,$('#target-language').value,(done,total)=>{button.textContent=`Translating document · ${Math.round(done/Math.max(1,total)*100)}%`});
     button.textContent='Composing translated pages…';
-    translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true);
+    translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true,$('#target-language').value);
     await renderTranslationPreview(translatedDocument.blob);
     const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
     button.innerHTML='Download translated PDF <span>↗</span>';
-    toast('Translated document ready · review the page preview before downloading.');
+    toast(translatedDocument.overflowLines?`Translation ready · ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?' may':'s may'} overflow. Review the page preview.`:'Translated document ready · review the page preview before downloading.');
   }catch(error){toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>'}
 }
 async function performCurrentTask(){
@@ -182,7 +183,7 @@ async function performCurrentTask(){
       else throw new Error('This conversion is not available for that format yet. Try PDF, TXT, PNG, or JPEG.');
     } else if(pendingTask==='Translate'){
       if(!translatedDocument){button.disabled=false;await translateCurrentLines();return}
-      DocumentEngine.download(translatedDocument.blob,translatedDocument.filename);toast(translatedDocument.overflowLines?`Translated PDF downloaded. Review ${translatedDocument.overflowLines} long line${translatedDocument.overflowLines===1?'':'s'} for fit.`:'Translated PDF downloaded.');
+      DocumentEngine.download(translatedDocument.blob,translatedDocument.filename);toast(translatedDocument.overflowLines?`Translated PDF downloaded. Review ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?'':'s'} for fit.`:'Translated PDF downloaded.');
     } else if(pendingTask==='Edit'){
       if(!selectedTaskFiles[0]||!taskPages.length)throw new Error('Choose a text-based PDF first.');readEditedLines();
       const longLines=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages);toast(longLines?`PDF downloaded. Review ${longLines} long line${longLines===1?'':'s'} for fit.`:'Edited PDF downloaded.');

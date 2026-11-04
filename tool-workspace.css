@@ -24,6 +24,7 @@
 .workspace-file-picker select{height:39px;min-width:0;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:#242630;color:#e5e4ec;padding:0 10px;font:10px var(--font)}
 .workspace-file-picker .secondary-button{margin:0;min-height:39px;border-radius:9px}
 .position-note{max-width:860px;margin:14px 0;padding:12px 14px;border:1px solid rgba(143,222,196,.1);border-radius:11px;background:linear-gradient(105deg,rgba(108,205,169,.09),rgba(255,255,255,.025));color:#a9ddcc;font-size:10px;line-height:1.6}
+.position-note-warning{border-color:rgba(245,190,127,.2);background:linear-gradient(105deg,rgba(241,176,101,.12),rgba(255,255,255,.025));color:#f0c996}
 .position-note span{color:#c3ded5}
 .document-preview-loading{display:flex;align-items:center;gap:11px;min-height:180px;justify-content:center;color:#a8a8b4;font-size:11px}
 .preview-spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.14);border-top-color:#b3a4ff;border-radius:50%;animation:preview-spin .8s linear infinite}
