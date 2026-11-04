@@ -102,7 +102,10 @@
 
   async function textToPdf(file) {
     requireLibraries('PDFLib');
-    const text = (await file.text()).replace(/\r/g, ''), output = await PDFDocument.create();
+    const files = Array.isArray(file) ? file : [file];
+    if (!files.length) throw new Error('Choose at least one text file.');
+    if (files.some(item => !item.name.toLowerCase().endsWith('.txt'))) throw new Error('Text-to-PDF accepts .txt files.');
+    const text = (await Promise.all(files.map(async item => files.length > 1 ? `— ${item.name} —\n${await item.text()}` : item.text()))).join('\n\n').replace(/\r/g, ''), output = await PDFDocument.create();
     const scale = 2, width = 612, height = 792, margin = 52 * scale, fontSize = 11 * scale, lineHeight = 16 * scale;
     let canvas = document.createElement('canvas'), context = canvas.getContext('2d');
     canvas.width = width * scale; canvas.height = height * scale;
@@ -121,52 +124,74 @@
       y += 5 * scale;
     }
     await drawPage();
-    download(bytesToBlob(await output.save()), `${safeBase(file.name)}.pdf`);
-    return 'Created a PDF from your text file. Text is rasterized to support Unicode; it will not be searchable.';
+    download(bytesToBlob(await output.save()), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-text'}-converted.pdf`);
+    return `Created a PDF from ${files.length} text file${files.length === 1 ? '' : 's'}. Text is rasterized to support Unicode; it will not be searchable.`;
   }
 
-  async function pdfToImages(file) {
-    requireLibraries('PDFLib', 'JSZip');
+  async function pdfsToImages(input) {
+    requireLibraries('JSZip');
     if (!pdfjs) throw new Error('The PDF preview library did not load. Check your connection and reload.');
-    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-    const zip = new JSZip();
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const page = await pdf.getPage(number), viewport = page.getViewport({ scale: 1.6 });
-      const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      zip.file(`page-${String(number).padStart(3, '0')}.png`, blob);
+    const files = Array.isArray(input) ? input : [input], zip = new JSZip();let totalPages=0;
+    for (const file of files) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF-to-image conversion accepts PDF files only.');
+      const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+      try {
+        for (let number = 1; number <= pdf.numPages; number++) {
+          const page = await pdf.getPage(number), viewport = page.getViewport({ scale: 1.6 });
+          const canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          zip.file(`${files.length > 1 ? `${safeBase(file.name)}/` : ''}page-${String(number).padStart(3, '0')}.png`, blob);
+          canvas.width = 0; canvas.height = 0;
+        }
+        totalPages += pdf.numPages;
+      } finally { await pdf.destroy(); }
     }
-    download(await zip.generateAsync({ type: 'blob' }), `${safeBase(file.name)}-pages.zip`);
-    return `Exported ${pdf.numPages} page images in a ZIP file.`;
+    download(await zip.generateAsync({ type: 'blob' }), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-pdfs'}-pages.zip`);
+    return `Exported ${totalPages} page image${totalPages === 1 ? '' : 's'} from ${files.length} PDF${files.length === 1 ? '' : 's'}.`;
+  }
+
+  async function pdfsToText(files) {
+    if (!files.length) throw new Error('Choose at least one PDF.');
+    const sections=[];
+    for (const file of files) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF-to-text conversion accepts PDF files only.');
+      const pages=await inspectPdf(file);
+      sections.push(`${files.length>1?`===== ${file.name} =====\n`:''}${pages.map((page,index)=>`--- Page ${index+1} ---\n${page.lines.map(line=>line.text).join('\n')}`).join('\n\n')}`);
+    }
+    const blob=new Blob([sections.join('\n\n')],{type:'text/plain;charset=utf-8'});
+    download(blob,`${files.length===1?safeBase(files[0].name):'transformo-pdfs'}-text.txt`);
+    return `Extracted text from ${files.length} PDF${files.length===1?'':'s'}. Scanned pages need OCR first.`;
   }
 
   async function inspectPdf(file) {
     if (!pdfjs) throw new Error('The PDF text reader did not load. Check your connection and reload.');
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
     const pages = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const page = await pdf.getPage(number), content = await page.getTextContent(), rows = [];
-      for (const item of content.items) {
-        if (!item.str || !item.str.trim() || !item.transform) continue;
-        const x = item.transform[4], y = item.transform[5], size = Math.max(5, Math.hypot(item.transform[0], item.transform[1])), width = Math.max(0, item.width || 0);
-        let row = rows.find(candidate => Math.abs(candidate.y - y) <= Math.max(1.25, size * .16));
-        if (!row) { row = { y, segments: [] }; rows.push(row); }
-        const nearby = row.segments.map(segment => {
-          const gap = x > segment.right ? x - segment.right : x + width < segment.left ? segment.left - (x + width) : 0;
-          return { segment, gap };
-        }).filter(candidate => candidate.gap <= Math.max(14, size * 2.2)).sort((a, b) => a.gap - b.gap)[0];
-        const segment = nearby?.segment || { page: number - 1, x, y, size, width: 0, height: 0, left: x, right: x, parts: [] };
-        if (!nearby) row.segments.push(segment);
-        segment.x = Math.min(segment.x, x); segment.left = Math.min(segment.left, x); segment.right = Math.max(segment.right, x + width);
-        segment.size = Math.max(segment.size, size); segment.height = Math.max(segment.height, item.height || size);
-        segment.width = Math.max(0, segment.right - segment.left); segment.parts.push({ x, text: item.str });
+    try {
+      for (let number = 1; number <= pdf.numPages; number++) {
+        const page = await pdf.getPage(number), content = await page.getTextContent(), rows = [];
+        for (const item of content.items) {
+          if (!item.str || !item.str.trim() || !item.transform) continue;
+          const x = item.transform[4], y = item.transform[5], size = Math.max(5, Math.hypot(item.transform[0], item.transform[1])), width = Math.max(0, item.width || 0);
+          let row = rows.find(candidate => Math.abs(candidate.y - y) <= Math.max(1.25, size * .16));
+          if (!row) { row = { y, segments: [] }; rows.push(row); }
+          const nearby = row.segments.map(segment => {
+            const gap = x > segment.right ? x - segment.right : x + width < segment.left ? segment.left - (x + width) : 0;
+            return { segment, gap };
+          }).filter(candidate => candidate.gap <= Math.max(14, size * 2.2)).sort((a, b) => a.gap - b.gap)[0];
+          const segment = nearby?.segment || { page: number - 1, x, y, size, width: 0, height: 0, left: x, right: x, parts: [] };
+          if (!nearby) row.segments.push(segment);
+          segment.x = Math.min(segment.x, x); segment.left = Math.min(segment.left, x); segment.right = Math.max(segment.right, x + width);
+          segment.size = Math.max(segment.size, size); segment.height = Math.max(segment.height, item.height || size);
+          segment.width = Math.max(0, segment.right - segment.left); segment.parts.push({ x, text: item.str });
+        }
+        const lines = rows.flatMap(row => row.segments.map(line => ({ ...line, y: row.y, text: line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim() })))
+          .filter(line => line.text).sort((a, b) => b.y - a.y || a.x - b.x);
+        pages.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], lines });
       }
-      const lines = rows.flatMap(row => row.segments.map(line => ({ ...line, y: row.y, text: line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim() })))
-        .filter(line => line.text).sort((a, b) => b.y - a.y || a.x - b.x);
-      pages.push({ width: page.view[2] - page.view[0], height: page.view[3] - page.view[1], lines });
-    }
-    return pages;
+      return pages;
+    } finally { await pdf.destroy(); }
   }
 
   async function renderPdfPages(file, scale = 0.42, limit = 24) {
@@ -355,5 +380,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
