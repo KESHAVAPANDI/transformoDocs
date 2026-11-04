@@ -50,7 +50,7 @@
         </section>
 
         <section class="page-view visible" id="documents-view">
-          <div class="welcome-row compact-welcome"><div><div class="eyebrow"><span class="live-dot"></span> DOCUMENTS</div><h1>Document tools</h1><p class="welcome-subtitle">Convert, translate, merge, or edit files on this device.</p></div><button class="primary-button" id="upload-button"><span>＋</span> Add files</button><input id="file-input" type="file" multiple hidden /></div>
+          <div class="welcome-row compact-welcome"><h1>Documents</h1><button class="primary-button" id="upload-button"><span>＋</span> Add files</button><input id="file-input" type="file" multiple hidden /></div>
 
           <section class="tool-section" id="tool-section"><div class="section-heading"><div><h2>Choose a tool</h2><p>Start with the task you need.</p></div></div><div class="tool-grid">
             <button class="tool-card glass-panel" data-task="Edit"><span class="tool-card-icon icon-edit">✎</span><span class="tool-card-copy"><strong>Edit document</strong><small>Make it yours, down to the pixel</small></span><span class="card-arrow">↗</span></button>
@@ -65,12 +65,13 @@
             <button class="tool-card glass-panel" data-task="Organize"><span class="tool-card-icon icon-organize">▦</span><span class="tool-card-copy"><strong>Organize pages</strong><small>Reorder, rotate, or remove</small></span><span class="card-arrow">↗</span></button>
             <button class="tool-card glass-panel" data-task="Watermark"><span class="tool-card-icon icon-edit">✧</span><span class="tool-card-copy"><strong>Add a watermark</strong><small>Stamp every page with a subtle mark</small></span><span class="card-arrow">↗</span></button>
             <button class="tool-card glass-panel" data-task="Number"><span class="tool-card-icon icon-split">№</span><span class="tool-card-copy"><strong>Add page numbers</strong><small>Number pages with one click</small></span><span class="card-arrow">↗</span></button>
+            <button class="tool-card glass-panel" data-task="Compress"><span class="tool-card-icon icon-organize">↓</span><span class="tool-card-copy"><strong>Compress PDF</strong><small>Reduce file size with quality presets</small></span><span class="card-arrow">↗</span></button>
           </div></section>
 
           <section class="recent-section"><div class="section-heading recent-heading"><div><h2>Your files</h2><p>Saved on this device.</p></div><div class="recent-actions"><div class="filter-tabs"><button class="filter-tab active" data-filter="all">All files</button><button class="filter-tab" data-filter="document">Documents</button><button class="filter-tab" data-filter="video">Videos</button></div></div></div><div class="file-table glass-panel"><div class="file-header"><span>NAME <i>↕</i></span><span>SAVED</span><span>FILE SIZE</span><span></span></div><div id="file-list"></div><div class="empty-state" id="empty-state"><div>✧</div><strong>Your workspace is clear.</strong><span>Add a file to edit, convert, translate, or organize it.</span></div></div></section>
         </section>
 
-        <section class="page-view" id="videos-view"><div class="welcome-row compact-welcome video-welcome"><div><div class="eyebrow"><span class="live-dot video-dot"></span> VIDEO</div><h1>Video tools</h1><p class="welcome-subtitle">Arrange and trim clips, add captions, export a sequence.</p></div><button class="primary-button video-primary" id="video-upload"><span>＋</span> Add video</button><input id="video-input" type="file" accept="video/*" multiple hidden /></div>
+        <section class="page-view" id="videos-view"><div class="welcome-row compact-welcome video-welcome"><h1>Video studio</h1><button class="primary-button video-primary" id="video-upload"><span>＋</span> Add video</button><input id="video-input" type="file" accept="video/*" multiple hidden /></div>
           <div class="section-heading video-project-head"><div><h2>Your projects</h2><p>Videos saved on this device.</p></div></div><div class="video-projects" id="video-projects"></div><div id="video-editor-workspace"></div></section>
 
       </main>

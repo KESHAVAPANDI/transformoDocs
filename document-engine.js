@@ -66,6 +66,32 @@
     return `Added page numbers to ${pages.length} page${pages.length === 1 ? '' : 's'}.`;
   }
 
+  async function compressPdf(file, preset = 'balanced', onProgress = () => {}) {
+    requireLibraries('PDFLib');
+    if (!pdfjs) throw new Error('The PDF renderer did not load. Check your connection and reload.');
+    if (!file?.name?.toLowerCase().endsWith('.pdf')) throw new Error('Choose a PDF to compress.');
+    const settings = { compact: { scale: 1.2, quality: .62 }, balanced: { scale: 1.65, quality: .78 }, quality: { scale: 2.5, quality: .9 } }[preset];
+    if (!settings) throw new Error('Choose a compression preset.');
+    const source = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise, pageCount = source.numPages, output = await PDFDocument.create();
+    try {
+      for (let number = 1; number <= pageCount; number++) {
+        const page = await source.getPage(number), viewport = page.getViewport({ scale: 1 }), renderViewport = page.getViewport({ scale: settings.scale });
+        const canvas = document.createElement('canvas'); canvas.width = Math.ceil(renderViewport.width); canvas.height = Math.ceil(renderViewport.height);
+        const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: context, viewport: renderViewport, background: '#ffffff' }).promise;
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', settings.quality));
+        if (!imageBlob) throw new Error(`Page ${number} could not be compressed in this browser.`);
+        const image = await output.embedJpg(await imageBlob.arrayBuffer()), outputPage = output.addPage([viewport.width, viewport.height]);
+        outputPage.drawImage(image, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+        canvas.width = 0; canvas.height = 0; onProgress(number, pageCount);
+      }
+    } finally { await source.destroy(); }
+    const blob = bytesToBlob(await output.save({ useObjectStreams: true }));
+    if (blob.size >= file.size) return { compressed: false, originalBytes: file.size, outputBytes: blob.size, pageCount };
+    download(blob, `${safeBase(file.name)}-compressed.pdf`);
+    return { compressed: true, originalBytes: file.size, outputBytes: blob.size, pageCount };
+  }
+
   async function splitPdf(file, range) {
     requireLibraries('PDFLib');
     const source = await PDFDocument.load(await file.arrayBuffer());
@@ -407,5 +433,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();

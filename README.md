@@ -38,7 +38,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate related lines together as positioned text blocks with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, add a caption overlay, and export one WebM sequence in the browser. |
 
@@ -66,6 +66,8 @@ python -m http.server 8000
 ```
 
 Internet access is needed to load the PDF libraries. The selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
+
+PDF compression is an image-based option for visual fidelity: it redraws each page as a JPEG, so the exported file does not keep searchable text, links, or form fields. Some source PDFs may not shrink; in that case Transformo keeps the original and suggests trying the compact preset.
 
 ## 🧭 Where Transformo can go
 

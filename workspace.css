@@ -1,4 +1,5 @@
 .workspace-file-picker{display:grid;gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}.workspace-file-picker>label{font-size:9px;color:#9b9da7}.workspace-file-picker .secondary-button{justify-self:start;margin:0}.file-open{max-width:100%;display:block;padding:0;text-align:left;background:transparent;border:0;color:#dedee5;font:10px var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file-open:hover{color:#c9bdff;text-decoration:underline}.row-menu{width:22px;height:26px;border-radius:5px}.row-menu:hover{background:rgba(255,255,255,.06);color:#ddd}
-.compact-welcome{align-items:center;margin:7px 0 21px}
-.compact-welcome h1{margin:8px 0 4px;font-size:clamp(25px,2.8vw,32px);letter-spacing:-1.2px}
+.compact-welcome{align-items:center;margin:9px 0 24px}
+.compact-welcome h1{margin:0;font-size:clamp(25px,2.8vw,32px);letter-spacing:-1.2px}
 #documents-view.drag-over{outline:1px dashed rgba(183,167,255,.55);outline-offset:8px;border-radius:16px}
+@media(max-width:600px){.compact-welcome{align-items:center;margin:4px 0 18px}.compact-welcome h1{font-size:28px;letter-spacing:-1.2px}}
