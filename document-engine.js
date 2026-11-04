@@ -41,6 +41,31 @@
     return 'Merged PDF downloaded. The originals are unchanged.';
   }
 
+  async function watermarkPdf(file, text) {
+    requireLibraries('PDFLib');
+    const watermark = text.trim();
+    if (!watermark) throw new Error('Enter the watermark text first.');
+    const pdf = await PDFDocument.load(await file.arrayBuffer()), font = await pdf.embedFont(StandardFonts.HelveticaBold);
+    pdf.getPages().forEach(page => {
+      const size = Math.min(52, Math.max(24, page.getWidth() * .085));
+      const width = font.widthOfTextAtSize(watermark, size);
+      page.drawText(watermark, { x: (page.getWidth() - width) / 2, y: page.getHeight() * .49, size, font, color: rgb(.55, .54, .62), opacity: .24, rotate: degrees(35) });
+    });
+    download(bytesToBlob(await pdf.save()), `${safeBase(file.name)}-watermarked.pdf`);
+    return 'Watermarked PDF downloaded. The original is unchanged.';
+  }
+
+  async function numberPdf(file) {
+    requireLibraries('PDFLib');
+    const pdf = await PDFDocument.load(await file.arrayBuffer()), font = await pdf.embedFont(StandardFonts.Helvetica), pages = pdf.getPages();
+    pages.forEach((page, index) => {
+      const label = `${index + 1}`, size = 10, width = font.widthOfTextAtSize(label, size);
+      page.drawText(label, { x: (page.getWidth() - width) / 2, y: 20, size, font, color: rgb(.35, .35, .4) });
+    });
+    download(bytesToBlob(await pdf.save()), `${safeBase(file.name)}-numbered.pdf`);
+    return `Added page numbers to ${pages.length} page${pages.length === 1 ? '' : 's'}.`;
+  }
+
   async function splitPdf(file, range) {
     requireLibraries('PDFLib');
     const source = await PDFDocument.load(await file.arrayBuffer());
@@ -128,9 +153,10 @@
     return `Created a PDF from ${files.length} text file${files.length === 1 ? '' : 's'}. Text is rasterized to support Unicode; it will not be searchable.`;
   }
 
-  async function pdfsToImages(input) {
+  async function pdfsToImages(input, format = 'png') {
     requireLibraries('JSZip');
     if (!pdfjs) throw new Error('The PDF preview library did not load. Check your connection and reload.');
+    const isJpg = format === 'jpg', mimeType = isJpg ? 'image/jpeg' : 'image/png', extension = isJpg ? 'jpg' : 'png';
     const files = Array.isArray(input) ? input : [input], zip = new JSZip();let totalPages=0;
     for (const file of files) {
       if (!file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF-to-image conversion accepts PDF files only.');
@@ -140,15 +166,16 @@
           const page = await pdf.getPage(number), viewport = page.getViewport({ scale: 1.6 });
           const canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
           await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-          zip.file(`${files.length > 1 ? `${safeBase(file.name)}/` : ''}page-${String(number).padStart(3, '0')}.png`, blob);
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, isJpg ? .9 : undefined));
+          if (!blob) throw new Error(`This browser could not create ${extension.toUpperCase()} images.`);
+          zip.file(`${files.length > 1 ? `${safeBase(file.name)}/` : ''}page-${String(number).padStart(3, '0')}.${extension}`, blob);
           canvas.width = 0; canvas.height = 0;
         }
         totalPages += pdf.numPages;
       } finally { await pdf.destroy(); }
     }
     download(await zip.generateAsync({ type: 'blob' }), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-pdfs'}-pages.zip`);
-    return `Exported ${totalPages} page image${totalPages === 1 ? '' : 's'} from ${files.length} PDF${files.length === 1 ? '' : 's'}.`;
+    return `Exported ${totalPages} ${extension.toUpperCase()} page image${totalPages === 1 ? '' : 's'} from ${files.length} PDF${files.length === 1 ? '' : 's'}.`;
   }
 
   async function pdfsToText(files) {
@@ -380,5 +407,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();

@@ -12,8 +12,8 @@
 .tool-page-footer span:first-child{color:#a9dccc}
 .tool-field{display:flex;flex-direction:column;gap:7px;margin:12px 0}
 .tool-field label,.workspace-file-picker label{font-size:10px;color:#b2b2bd}
-.tool-field select,.tool-field input{height:40px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.055);color:#eeedf3;padding:0 11px;font:11px var(--font);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.035)}
-.tool-field select:focus,.tool-field input:focus{border-color:#a091e7;box-shadow:0 0 0 3px rgba(160,145,231,.12)}
+.tool-field input{height:40px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.055);color:#eeedf3;padding:0 11px;font:11px var(--font);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.035)}
+.tool-field input:focus{border-color:#a091e7;box-shadow:0 0 0 3px rgba(160,145,231,.12)}
 .tool-field input[type=file]{height:auto;min-height:44px;padding:10px;font-size:10px}
 .language-pair{max-width:660px;grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr);gap:12px;margin:2px 0 12px}
 .language-pair .tool-field{margin:0}
@@ -21,7 +21,6 @@
 .workspace-file-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:9px;margin:12px 0;padding:12px 14px;border:1px solid rgba(255,255,255,.075);border-radius:12px;background:rgba(255,255,255,.025)}
 .workspace-file-picker[hidden]{display:none}
 .workspace-file-picker label{grid-column:1/-1}
-.workspace-file-picker select{height:39px;min-width:0;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:#242630;color:#e5e4ec;padding:0 10px;font:10px var(--font)}
 .workspace-file-picker .secondary-button{margin:0;min-height:39px;border-radius:9px}
 .position-note{max-width:860px;margin:14px 0;padding:12px 14px;border:1px solid rgba(143,222,196,.1);border-radius:11px;background:linear-gradient(105deg,rgba(108,205,169,.09),rgba(255,255,255,.025));color:#a9ddcc;font-size:10px;line-height:1.6}
 .position-note-warning{border-color:rgba(245,190,127,.2);background:linear-gradient(105deg,rgba(241,176,101,.12),rgba(255,255,255,.025));color:#f0c996}

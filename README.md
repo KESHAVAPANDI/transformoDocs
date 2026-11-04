@@ -38,14 +38,14 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, convert PDFs to text or PNGs, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, convert PDFs to text, PNG, or JPG, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages, translate related lines together as positioned text blocks with the browser Translator API when available, compare original and translated pages, and download a layout-aware PDF. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
 
 ### Small details, big difference
 
 - **A workspace that feels like one place.** A translucent, layered interface, soft color, and restrained motion give the tools room to breathe.
-- **A quick way in.** Drag files into the workspace, browse for them, or use focused tool cards. Conversion choices are cards that match the selected file type, and merge files can be reordered before combining.
+- **A quick way in.** Drag files into the workspace, browse for them, or use focused action cards for conversion, merging, and page tasks. Conversion choices are cards that match the selected file type, and merge files can be reordered before combining.
 - **Search that moves with you.** Find recent files and jump straight into a tool with `⌘ K` (or `Ctrl K`).
 - **Responsive by design.** The desktop sidebar becomes a compact navigation rail, then a bottom bar on small screens.
 - **Reduced-motion support.** Interface animation respects the operating system preference.
@@ -102,7 +102,7 @@ transformoDocs/
 
 ## 🛠 Current prototype boundaries
 
-PDF merge, visual page selection, page organization, image/text conversion, PDF-to-text and PDF-to-PNG export, positioned block editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
+PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
 - PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
 - Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
