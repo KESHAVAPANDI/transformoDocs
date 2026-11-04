@@ -90,6 +90,7 @@ transformoDocs/
 ├── ocr.css             # OCR controls
 ├── workspace-store.js  # Device-local file shelf backed by IndexedDB
 ├── workspace.css       # Saved-file selection and workspace controls
+├── feedback.css        # Toast feedback above dialogs
 ├── video-engine.js     # Local trim, caption, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
