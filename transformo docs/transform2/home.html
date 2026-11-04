@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformo Docs - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for card hover and shadow */
+        .card-shadow {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-hover:hover .icon {
+            transform: scale(1.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:active {
+            border: 1px solid black;
+            transform: scale(0.95);
+        }
+
+        .icon {
+            transition: transform 0.3s ease;
+        }
+
+        /* Sticky footer styles */
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content {
+            flex-grow: 1;
+        }
+
+        /* Navbar styles */
+        .navbar {
+            background-color: white;
+            border-bottom: 1px solid #eaeaea;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .navbar a {
+            font-weight: bold;
+            color: #666;
+            transition: color 0.3s;
+        }
+
+        .navbar a:hover {
+            color: #000;
+        }
+
+        /* Dropdown menu styling */
+        #mobile-menu {
+            position: absolute;
+            top: 100%;
+            right: 0; /* Aligned to the right */
+            width: 180px; /* Reduced width */
+            z-index: 50; /* High z-index */
+            background-color: white;
+            border: 1px solid #eaeaea;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease; /* Smooth transition */
+        }
+
+        #mobile-menu.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* For mobile menu link styling */
+        #mobile-menu a {
+            padding: 0.5rem 1rem;
+            width: 100%;
+            display: block;
+            text-align: center;
+            color: #666;
+        }
+
+        #mobile-menu a:hover {
+            background-color: #f3f3f3;
+            color: #000;
+        }
+
+        /* Ensuring no overflow */
+        .navbar-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* Media query to trigger the dropdown earlier to prevent overflow */
+        @media (max-width: 768px) {
+            nav.sm\\:flex {
+                display: none;
+            }
+
+            .sm\\:hidden {
+                display: block;
+            }
+        }
+
+        /* Hamburger button and menu transition */
+        #menu-btn {
+            transition: transform 0.3s ease;
+        }
+
+        #menu-btn:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header Section -->
+    <header class="navbar">
+        <div class="container mx-auto navbar-container">
+            <!-- Icon and Transformo Docs text -->
+            <div class="flex items-center space-x-3">
+                <a href="home.html">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M4 10v10a1 1 0 001 1h3m10-11l9 9m-9-9v10a1 1 0 001 1h3a1 1 0 001-1V10" />
+                    </svg>
+                </a>
+                <div class="text-2xl font-bold text-gray-800">Transformo Docs</div>
+            </div>
+
+            <!-- Hamburger menu for mobile (small screens) -->
+            <div class="sm:hidden">
+                <button id="menu-btn" class="focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Regular nav for larger screens -->
+            <nav class="hidden sm:flex space-x-6">
+                <a href="UpDoc.html">Upload Document</a>
+                <a href="eDoc.html">e-Doc Conversion</a>
+                <a href="language-conversion.html">Language Conversion</a>
+                <a href="edit.html">Edit Document</a>
+                <a href="merge.html">Merge</a>
+                <a href="split.html">Split</a>
+            </nav>
+        </div>
+
+        <!-- Dropdown menu (hidden initially, toggled on button click) -->
+        <div id="mobile-menu" class="hidden sm:hidden">
+            <nav class="flex flex-col items-center space-y-2 mt-2">
+                <a href="UpDoc.html">Upload Document</a>
+                <a href="eDoc.html">e-Doc Conversion</a>
+                <a href="language-conversion.html">Language Conversion</a>
+                <a href="edit.html">Edit Document</a>
+                <a href="merge.html">Merge</a>
+                <a href="split.html">Split</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Content Section -->
+    <div class="container mx-auto content bg-white shadow-lg rounded-lg mt-8">
+        <section class="text-center py-16">
+            <h1 class="text-4xl font-semibold text-gray-800 mb-4">Streamline Your Document Workflow</h1>
+            <p class="text-gray-600 mb-12">Effortlessly manage, edit, and convert your documents with our powerful tools designed to enhance productivity.</p>
+            <div class="container mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 px-4">
+                <div class="bg-white p-6 rounded-lg card-shadow card-hover">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon w-12 h-12 mb-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-800">Merge Documents</h2>
+                    <p class="text-gray-600">Combine multiple document files easily.</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg card-shadow card-hover">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon w-12 h-12 mb-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-800">Split Documents</h2>
+                    <p class="text-gray-600">Separate document pages into individual files.</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg card-shadow card-hover">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon w-12 h-12 mb-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <h2 class="text-lg font-semibold text-gray-800">Edit Documents</h2>
+                    <p class="text-gray-600">Edit text, images, and annotations.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="bg-gray-800 text-white py-4">
+        <div class="container mx-auto text-center">
+            <p>© 2024 Transformo Docs Application - All Rights Reserved</p>
+        </div>
+    </footer>
+
+    <script>
+        // JavaScript for hamburger menu and dropdown
+        document.getElementById('menu-btn').addEventListener('click', function() {
+            var menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+            menu.classList.toggle('show'); // Added class for transition
+        });
+    </script>
+</body>
+
+</html>

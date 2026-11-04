@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformo Docs - Merge Documents</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for card hover and shadow */
+        .card-shadow {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-hover:hover .icon {
+            transform: scale(1.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:active {
+            border: 1px solid black;
+            transform: scale(0.95);
+        }
+
+        .icon {
+            transition: transform 0.3s ease;
+        }
+
+        /* Sticky footer styles */
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content {
+            flex-grow: 1;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100vh;
+            background-color: #f5f5f5;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-item {
+            display: grid;
+            grid-template-columns: 1fr 40px;
+            align-items: center;
+            background-color: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            width: 90%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .remove-btn {
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            margin-left: 10px;
+            cursor: pointer;
+            text-align: center;
+            display: inline-block;
+        }
+
+        .file-count {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .add-btn {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .add-btn:hover {
+            background-color: #555;
+        }
+
+        /* Button styles for download section */
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-width: 2px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn-blue {
+            border-color: blue;
+            color: blue;
+        }
+
+        .btn-blue:hover {
+            background-color: blue;
+            color: white;
+        }
+
+        .btn-red {
+            border-color: red;
+            color: red;
+        }
+
+        .btn-red:hover {
+            background-color: red;
+            color: white;
+        }
+
+        .btn-green {
+            border-color: green;
+            color: green;
+        }
+
+        .btn-green:hover {
+            background-color: green;
+            color: white;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Sticky footer styles */
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Center the navbar text */
+        .navbar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 64px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header Section -->
+    <header class="navbar">
+        <div class="container mx-auto navbar-container">
+            <!-- Icon and Transformo Docs text -->
+            <div class="flex items-center space-x-3">
+                <a href="home.html">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M4 10v10a1 1 0 001 1h3m10-11l9 9m-9-9v10a1 1 0 001 1h3a1 1 0 001-1V10" />
+                    </svg>
+                </a>
+                <div class="text-2xl font-bold text-gray-800">Transformo Docs</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Merge Content Section -->
+    <div class="container mx-auto content bg-white shadow-lg rounded-lg mt-8">
+        <section class="text-center py-16">
+            <h1 class="text-4xl font-semibold text-gray-800 mb-4">Merge Your Documents</h1>
+            <p class="text-gray-600 mb-12">Easily combine multiple documents into one with our powerful tool.</p>
+
+            <form id="uploadForm" action="/merge-documents" method="POST" enctype="multipart/form-data" class="mx-auto p-6 bg-gray-50 rounded-lg shadow-lg max-w-md">
+                <div class="mb-4">
+                    <label class="block text-left text-gray-800 font-semibold mb-2" for="file-upload">Select documents to merge:</label>
+                    <input type="file" id="file-upload" name="documents[]" multiple class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:border-indigo-500 focus:ring focus:ring-indigo-200">
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-left text-gray-800 font-semibold mb-2" for="filename">Output Filename:</label>
+                    <input type="text" id="filename" name="filename" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:border-indigo-500 focus:ring focus:ring-indigo-200">
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-400">Merge Documents</button>
+            </form>
+        </section>
+
+        <!-- Functionality Buttons Section -->
+        <div class="button-container">
+            <button class="btn btn-blue" onclick="downloadFormat('word')">Download as Word</button>
+            <button class="btn btn-red" onclick="downloadFormat('pdf')">Download as PDF</button>
+            <button class="btn btn-green" onclick="downloadFormat('text')">Download as Text Document</button>
+        </div>
+    </div>
+
+    <!-- Sidebar for chosen files -->
+    <div class="sidebar hidden" id="fileSidebar">
+        <div class="file-count" id="fileCount">0 files chosen</div>
+        <div id="fileList"></div>
+        <button class="add-btn">Add</button>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="mt-auto">
+        <div class="container mx-auto">
+            <p>&copy; 2024 Transformo Docs. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        const fileUpload = document.getElementById('file-upload');
+        const fileList = document.getElementById('fileList');
+        const fileCount = document.getElementById('fileCount');
+        const fileSidebar = document.getElementById('fileSidebar');
+
+        let fileArray = [];
+
+        fileUpload.addEventListener('change', (event) => {
+            const files = Array.from(event.target.files);
+
+            fileArray = fileArray.concat(files);
+
+            // Update the file list display
+            updateFileList();
+            fileSidebar.classList.remove('hidden');
+        });
+
+        function updateFileList() {
+            fileList.innerHTML = ''; // Clear the current file list
+            fileCount.textContent = `${fileArray.length} files chosen`;
+
+            fileArray.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.classList.add('file-item');
+                fileItem.innerHTML = `<span>${file.name}</span> <button class="remove-btn" data-index="${index}">x</button>`;
+
+                fileList.appendChild(fileItem);
+            });
+
+            // Add event listeners for remove buttons
+            document.querySelectorAll('.remove-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const index = event.target.dataset.index;
+                    fileArray.splice(index, 1);
+                    updateFileList(); // Refresh the list after removing
+                });
+            });
+        }
+
+        document.querySelector('.add-btn').addEventListener('click', () => {
+            fileUpload.click(); // Trigger file upload on Add Files button click
+        });
+
+        function downloadFormat(format) {
+            // Sends a request to download in the selected format
+            const form = document.getElementById('uploadForm');
+            form.action = `/merge-documents?format=${format}`;
+            form.submit();
+        }
+    </script>
+</body>
+
+</html>
