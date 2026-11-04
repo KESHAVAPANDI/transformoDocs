@@ -110,7 +110,7 @@ PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Long translated lines are shrunk to fit and flagged for review.
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
-- PDF image-backed export assumes a white page background for covering replaced text. Complex rotated text, columns, and colored backgrounds need review.
+- Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export creates a single WebM clip with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Multi-clip editing, multiple caption timings, and MP4 export are not implemented yet.
 - DOCX/PPTX/XLSX conversion and general Office document editing are not implemented yet.
 - Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.

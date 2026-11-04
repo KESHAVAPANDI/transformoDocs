@@ -213,6 +213,19 @@
     return pages;
   }
 
+  function samplePageBackground(ctx, x, y, width, height) {
+    const canvas = ctx.canvas, right = x + width, bottom = y + height;
+    const points = [
+      [x - 2, y - 1], [x - 2, bottom + 1], [right + 2, y - 1], [right + 2, bottom + 1],
+      [x + width * .5, y - 1], [x + width * .5, bottom + 1]
+    ];
+    const samples = points.filter(([px, py]) => px >= 0 && py >= 0 && px < canvas.width && py < canvas.height)
+      .map(([px, py]) => [...ctx.getImageData(Math.round(px), Math.round(py), 1, 1).data].slice(0, 3));
+    if (!samples.length) return 'rgb(255, 255, 255)';
+    const median = channel => samples.map(sample => sample[channel]).sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+    return `rgb(${median(0)}, ${median(1)}, ${median(2)})`;
+  }
+
   async function exportPositionedPdf(file, pages, onProgress = () => {}, returnBlob = false) {
     requireLibraries('PDFLib');
     if (!pdfjs) throw new Error('The PDF renderer did not load.');
@@ -229,14 +242,17 @@
         const [left, baseline] = viewport.convertToViewportPoint(line.x, line.y);
         const width = Math.max(6, line.width * viewport.scale), height = Math.max(7, line.height * viewport.scale);
         const x = left, y = baseline - height * .92, pad = Math.max(1, height * .06);
-        ctx.fillStyle = '#fff'; ctx.fillRect(x - pad, y, width + 2 * pad, height * 1.12);
+        const coverX = Math.max(0, x - pad), coverY = Math.max(0, y - pad);
+        const coverRight = Math.min(canvas.width, x + width + pad), coverBottom = Math.min(canvas.height, y + height * 1.12 + pad);
+        const background = samplePageBackground(ctx, coverX, coverY, coverRight - coverX, coverBottom - coverY);
+        ctx.fillStyle = background; ctx.fillRect(coverX, coverY, coverRight - coverX, coverBottom - coverY);
         let fontSize = Math.max(8, line.size * viewport.scale * .92); ctx.font = `${fontSize}px Arial, sans-serif`;
         while (ctx.measureText(value).width > width && fontSize > 6) { fontSize -= .5; ctx.font = `${fontSize}px Arial, sans-serif`; }
         if (ctx.measureText(value).width > width) overflowLines++;
         ctx.fillStyle = '#171717'; ctx.textBaseline = 'alphabetic'; ctx.fillText(value, x, baseline, width);
       }
       const image = await output.embedPng(await (await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))).arrayBuffer());
-      const newPage = output.addPage([page.view[2] - page.view[0], page.view[3] - page.view[1]]);
+      const newPage = output.addPage([viewport.width / viewport.scale, viewport.height / viewport.scale]);
       newPage.drawImage(image, { x: 0, y: 0, width: newPage.getWidth(), height: newPage.getHeight() });
       onProgress(index + 1, source.numPages);
     }
