@@ -71,7 +71,7 @@ The next step is to expand format coverage and make the layout-aware workflows m
 1. **Add Office formats.** Read and write DOCX, PPTX, and spreadsheets while preserving styles, tables, images, and page geometry.
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
-4. **Add OCR for scans.** Detect text and its bounding boxes on image-only pages before editing or translation.
+4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
 5. **Grow the video studio.** Add multiple timeline clips, timestamped captions, translated subtitle tracks, and a wider range of export formats.
 6. **Keep privacy visible.** Prefer local processing where practical, explain when a task needs a server, and make file retention clear.
 
