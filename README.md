@@ -35,7 +35,7 @@ Transformo is a local-first web workspace for common document operations and a f
 | Workspace | What it is for |
 | --- | --- |
 | **Documents** | Merge PDFs, extract selected pages, convert images and text to PDF, and export PDF pages as PNGs. |
-| **Layout-aware editing and translation** | Extract PDF text into positioned lines, review or edit each line, translate with the browser Translator API when available, and render replacement text at the same page coordinates. |
+| **Layout-aware editing and translation** | Extract PDF text into positioned lines, OCR image-only pages, review or edit each line, translate with the browser Translator API when available, and render replacement text at the same page coordinates. |
 | **Video studio** | Preview a local clip, choose a start and end, add or translate a caption, and export a new WebM file in the browser. |
 | **Activity** | A natural home for recent transformations and project history as the product grows. |
 
@@ -49,7 +49,7 @@ Transformo is a local-first web workspace for common document operations and a f
 
 ## 🚀 Getting started
 
-Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, and JSZip from public CDNs. Start it from a local web server so browser file APIs and the optional Translator API can run:
+Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, JSZip, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional Translator API can run:
 
 ```bash
 git clone https://github.com/KESHAVAPANDI/transformoDocs.git
@@ -87,6 +87,7 @@ transformoDocs/
 ├── video.css           # Video editing controls
 ├── app.js              # App navigation and task workflows
 ├── document-engine.js  # In-browser PDF and image/text conversion
+├── ocr.css             # OCR controls
 ├── video-engine.js     # Local trim, caption, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
@@ -94,11 +95,11 @@ transformoDocs/
 
 ## 🛠 Current prototype boundaries
 
-PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned line editing/translation, and single-clip video trimming/caption export are implemented in the browser. There are deliberate limits:
+PDF merge, page extraction, image/text conversion, PDF-to-PNG export, positioned line editing/translation, OCR for image-only PDF pages, and single-clip video trimming/caption export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
 - PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Long translated lines are shrunk to fit and flagged for review.
-- The PDF line editor needs selectable text. Scanned PDFs need OCR, which is not wired into this version.
+- OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
 - Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Browser support and available language models vary; there is no cloud translation fallback.
 - PDF image-backed export assumes a white page background for covering replaced text. Complex rotated text, columns, and colored backgrounds need review.
 - Video export creates a single WebM clip with an optional caption and audio where the browser supports media capture. Caption translation uses the browser's built-in Translator API. Multi-clip editing, multiple caption timings, and MP4 export are not implemented yet.

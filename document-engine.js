@@ -134,6 +134,29 @@
     return pages;
   }
 
+  async function ocrPdf(file, language = 'eng', onProgress = () => {}, existingPages = []) {
+    if (!pdfjs) throw new Error('The PDF renderer did not load. Check your connection and reload.');
+    if (!window.Tesseract) throw new Error('The OCR engine did not load. Check your connection and reload.');
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [], worker = await Tesseract.createWorker(language, 1, { logger: message => onProgress(message) });
+    try {
+      for (let number = 1; number <= pdf.numPages; number++) {
+        if (existingPages[number - 1]?.lines?.length) { pages.push(existingPages[number - 1]); onProgress({ status: 'recognizing text', progress: number / pdf.numPages }); continue; }
+        const page = await pdf.getPage(number), viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        const result = await worker.recognize(canvas), factor = viewport.scale;
+        const view = page.view, lines = (result.data.lines || []).map(line => {
+          const box = line.bbox;
+          return { page: number - 1, x: box.x0 / factor + view[0], y: view[3] - box.y1 / factor, width: (box.x1 - box.x0) / factor, height: (box.y1 - box.y0) / factor, size: (box.y1 - box.y0) / factor, text: line.text.trim() };
+        }).filter(line => line.text);
+        pages.push({ width: view[2] - view[0], height: view[3] - view[1], lines });
+        onProgress({ status: 'recognizing text', progress: number / pdf.numPages });
+      }
+    } finally { await worker.terminate(); }
+    return pages;
+  }
+
   function supportsTranslation() { return typeof window.Translator !== 'undefined'; }
   async function translateLines(pages, sourceLanguage, targetLanguage, onProgress = () => {}) {
     if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. You can still edit the extracted text manually, or open Transformo in a browser that supports on-device translation.');
@@ -179,5 +202,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, splitPdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, splitPdf, imagesToPdf, textToPdf, pdfToImages, inspectPdf, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
