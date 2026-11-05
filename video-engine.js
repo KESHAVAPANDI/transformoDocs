@@ -1,6 +1,6 @@
 /* Local multi-clip video editor using Canvas + MediaRecorder. */
 (() => {
-  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null;
+  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null, projectId = null, projectName = '', projectDirty = false, restoringProject = false;
   const root = () => document.querySelector('#video-editor-workspace');
   const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   function notify(message) {
@@ -14,14 +14,17 @@
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
   function safeBase(name) { return name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-|-$/g, '') || 'transformo-video'; }
-  function close() {
+  function close(force = false) {
+    if (!force && projectDirty && !confirm('This video edit has unsaved changes. Leave without saving?')) return false;
     const workspace = root(); if (workspace) workspace.innerHTML = '';
     clips.forEach(clip => URL.revokeObjectURL(clip.url)); clips = []; subtitles = []; activeClip = 0;
+    projectId = null; projectName = ''; projectDirty = false; restoringProject = false;
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
     if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     if (audioGraph) { audioGraph.destination.stream.getTracks().forEach(track => track.stop()); audioGraph.context.close(); audioGraph = null; }
     document.removeEventListener('keydown', escape);
     document.querySelector('#videos-view')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
   }
   function escape(event) { if (event.key === 'Escape' && clips.length) close(); }
   function totalDuration() { return clips.reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
@@ -33,6 +36,15 @@
     if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     const workspace = root();
     if (workspace) { const videoLink = workspace.querySelector('#download-video'), subtitleLink = workspace.querySelector('#download-subtitles'); if (videoLink) videoLink.hidden = true; if (subtitleLink) subtitleLink.hidden = true; }
+    markProjectDirty();
+  }
+  function markProjectDirty() {
+    if (restoringProject) return;
+    projectDirty = true;
+    const workspace = root(), button = workspace?.querySelector('#save-video-project'), status = workspace?.querySelector('#video-editor-status');
+    if (button) button.textContent = projectId ? 'Save changes' : 'Save project';
+    if (status) status.textContent = projectId ? 'Unsaved changes · save to update this project.' : 'Unsaved edit · save a local project to reopen it later.';
+    updateTotals();
   }
   function updateSubtitlePreview(time = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || 0)) {
     const preview = root()?.querySelector('#subtitle-preview'); if (!preview) return;
@@ -101,21 +113,32 @@
       notify(`Imported ${subtitles.length} subtitle cue${subtitles.length === 1 ? '' : 's'}${result.skipped ? ` · skipped ${result.skipped} invalid block${result.skipped === 1 ? '' : 's'}` : ''}${outside ? ` · ${outside} start beyond the timeline` : ''}.`);
     } catch (error) { notify(error.message || 'Could not read that SRT file.'); }
   }
-  async function addClips(files) {
+  async function addClips(files, clipSettings = []) {
     const candidates = [...files].filter(file => file.type.startsWith('video/') || /\.(mp4|mov|webm|mkv)$/i.test(file.name));
     const added = [];
-    for (const file of candidates) {
-      const clip = { file, url: URL.createObjectURL(file), duration: 0, start: 0, end: 0 };
+    for (const [index, file] of candidates.entries()) {
+      const setting = clipSettings[index] || {}, clip = { file, url: URL.createObjectURL(file), duration: 0, start: 0, end: 0, fileId: setting.fileId || window.TransformoWorkspaceFiles?.idFor(file) };
       clips.push(clip);
       try {
         const duration = await readDuration(clip.url);
-        clip.duration = duration; clip.end = duration; added.push(clip);
+        clip.duration = duration;
+        clip.start = Math.max(0, Math.min(duration, Number(setting.start) || 0));
+        clip.end = setting.end === undefined ? duration : Math.max(0, Math.min(duration, Number(setting.end) || duration));
+        if (clip.end <= clip.start) { clip.start = 0; clip.end = duration; }
+        added.push(clip);
       } catch { clips.pop(); URL.revokeObjectURL(clip.url); notify(`Could not read ${file.name}. Try an MP4 or WebM file.`); }
     }
     if (clips.length) {
       invalidateExports();
       activeClip = Math.min(activeClip, clips.length - 1);
       renderTimeline(); await showClip(activeClip); updateTotals();
+    }
+    if (clipSettings.length) {
+      restoringProject = false;
+      projectDirty = projectDirty || clips.length !== clipSettings.length;
+      const status = root()?.querySelector('#video-editor-status');
+      if (status) status.textContent = projectDirty ? 'Unsaved changes · save to update this project.' : `Saved locally · ${projectName}`;
+      updateTotals();
     }
     return added.map(clip => clip.file);
   }
@@ -126,15 +149,18 @@
       probe.onerror = () => reject(new Error('Unsupported video'));
     });
   }
-  function editor(files) {
-    close();
+  function editor(files, savedProject = null) {
+    if (!close()) return false;
+    const initialFiles = files ? (typeof files[Symbol.iterator] === 'function' && !files.name ? [...files] : [files]) : [];
+    projectId = savedProject?.id || null; projectName = savedProject?.name || initialFiles[0]?.name.replace(/\.[^.]+$/, '') || 'Untitled video edit'; projectDirty = false; restoringProject = !!savedProject;
+    subtitles = (savedProject?.subtitles || []).map(cue => ({ start: Number(cue.start) || 0, end: Number(cue.end) || 0, text: String(cue.text || '') }));
     const workspace = root(); if (!workspace) return;
     workspace.innerHTML = `<section class="video-editor glass-panel" id="video-editor" aria-labelledby="video-editor-title">
-      <header class="video-editor-header"><div><div class="eyebrow"><span class="live-dot video-dot"></span> LOCAL VIDEO EDITOR</div><h2 id="video-editor-title">Your video timeline</h2><p>Arrange clips, set in and out points, then export one sequence.</p></div><button class="video-back-button" id="video-editor-close" type="button">← Back to projects</button></header>
+      <header class="video-editor-header"><div><div class="eyebrow"><span class="live-dot video-dot"></span> LOCAL VIDEO EDITOR</div><h2 id="video-editor-title">Your video timeline</h2><p>Arrange clips, set in and out points, then export one sequence.</p></div><div class="video-project-header-actions"><label class="video-project-name-field"><span>PROJECT NAME</span><input id="video-project-name" type="text" maxlength="80" value="${escapeHtml(projectName)}" aria-label="Video project name" /></label><button class="secondary-button" id="save-video-project" type="button" disabled>${projectId ? 'Save changes' : 'Save project'}</button><button class="video-back-button" id="video-editor-close" type="button">← Back to projects</button></div></header>
       <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div id="subtitle-preview" class="subtitle-preview" hidden></div></div>
       <aside class="video-inspector"><div class="inspector-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div>
       <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="import-srt" type="button">Import SRT</button><input id="srt-input" type="file" accept=".srt,application/x-subrip,text/plain" hidden /><button class="secondary-button" id="export-srt" type="button" disabled>Export SRT</button><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-language" type="hidden" value="es" /><div class="caption-language-options" role="group" aria-label="Subtitle translation language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div id="subtitle-cues" class="subtitle-cues"></div>
-      <div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">Add clips to start your edit.</div></aside></div>
+      <div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">${projectId ? `Reopening ${escapeHtml(projectName)}…` : 'Add clips and save this timeline as a local project.'}</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
       <div class="video-timeline"><span>◷</span><div class="timeline-rail"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
@@ -146,9 +172,11 @@
       workspace.querySelector('.timeline-fill').style.width = `${clip ? Math.min(100, Math.max(0, (video.currentTime - clip.start) / span * 100)) : 0}%`;
       updateSubtitlePreview();
     });
-    workspace.querySelector('#video-editor-close').addEventListener('click', close);
+    workspace.querySelector('#video-editor-close').addEventListener('click', () => close());
+    workspace.querySelector('#video-project-name').addEventListener('input', event => { restoringProject = false; projectName = event.target.value; markProjectDirty(); });
+    workspace.querySelector('#save-video-project').addEventListener('click', saveProject);
     workspace.querySelector('#video-add-clips').addEventListener('click', () => workspace.querySelector('#timeline-input').click());
-    workspace.querySelector('#timeline-input').addEventListener('change', async event => { try { const added = await addClips(event.target.files); if (added.length) window.dispatchEvent(new CustomEvent('transformo:video-files-added', { detail: { files: added } })); } catch (error) { notify(error.message || 'Could not add those clips.'); } event.target.value = ''; });
+    workspace.querySelector('#timeline-input').addEventListener('change', async event => { try { const added = await addClips(event.target.files); if (added.length && window.TransformoWorkspaceFiles?.add) { await window.TransformoWorkspaceFiles.add(added, 'video'); for (const clip of clips) clip.fileId = window.TransformoWorkspaceFiles.idFor(clip.file) || clip.fileId; updateTotals(); } } catch (error) { notify(error.message || 'Could not add those clips.'); } event.target.value = ''; });
     workspace.querySelector('#timeline-clips').addEventListener('click', timelineAction);
     workspace.querySelector('#trim-start').addEventListener('change', updateTrim);
     workspace.querySelector('#trim-end').addEventListener('change', updateTrim);
@@ -166,8 +194,9 @@
     workspace.querySelector('#export-video').addEventListener('click', exportVideo);
     renderSubtitles();
     document.addEventListener('keydown', escape);
-    addClips(files).catch(error => notify(error.message || 'Could not load the selected clips.'));
+    addClips(initialFiles, savedProject?.clips || []).catch(error => notify(error.message || 'Could not load the selected clips.'));
     workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
   }
   async function showClip(index) {
     if (!clips[index]) return;
@@ -219,6 +248,7 @@
     const summary = workspace.querySelector('#timeline-summary'); if (summary) summary.textContent = `${count} clip${count === 1 ? '' : 's'} · ${format(duration)}`;
     const total = workspace.querySelector('#timeline-duration'); if (total) total.textContent = format(duration);
     const button = workspace.querySelector('#export-video'); if (button) button.disabled = !count || clips.some(clip => clip.end <= clip.start);
+    const save = workspace.querySelector('#save-video-project'); if (save) save.disabled = !count || clips.some(clip => !clip.duration || !(clip.fileId || window.TransformoWorkspaceFiles?.idFor(clip.file)));
   }
   function wrapText(ctx, text, maxWidth) {
     const words = text.split(/\s+/), rows = []; let row = '';
@@ -314,5 +344,34 @@
       if (recorder?.state !== 'inactive') recorder?.stop(); if (graph) stream?.getVideoTracks().forEach(track => track.stop()); else stream?.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1; status.textContent = error.message || 'Video export failed.'; notify(status.textContent);
     } finally { button.disabled = false; updateTotals(); }
   }
-  window.TransformoVideoEditor = { open: editor, addClips, importSubtitles: importSrt, hasWorkspace: () => !!root()?.querySelector('#video-editor') };
+  async function saveProject() {
+    const workspace = root(), button = workspace?.querySelector('#save-video-project'), status = workspace?.querySelector('#video-editor-status'), input = workspace?.querySelector('#video-project-name');
+    if (!workspace || !clips.length) { notify('Add at least one clip before saving a project.'); return; }
+    const references = clips.map(clip => ({ fileId: clip.fileId || window.TransformoWorkspaceFiles?.idFor(clip.file), start: clip.start, end: clip.end }));
+    if (clips.some(clip => !clip.duration) || references.some(clip => !clip.fileId)) { notify('Wait for clips to load and save them to this device before saving the project.'); return; }
+    projectName = input?.value.trim() || 'Untitled video edit';
+    if (button) { button.disabled = true; button.textContent = 'Saving…'; }
+    try {
+      const record = await WorkspaceStore.saveVideoProject({ id: projectId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: projectName, clips: references, subtitles: subtitles.map(cue => ({ start: cue.start, end: cue.end, text: cue.text })) });
+      projectId = record.id; projectName = record.name; projectDirty = false; restoringProject = false;
+      if (input) input.value = projectName;
+      if (status) status.textContent = `Saved locally · ${new Date(record.updatedAt).toLocaleTimeString()}`;
+      if (button) button.textContent = 'Save changes';
+      window.dispatchEvent(new CustomEvent('transformo:video-project-saved'));
+    } catch (error) { notify(error.message || 'Could not save this video project locally.'); }
+    finally { updateTotals(); }
+  }
+  async function openProject(id) {
+    const project = await WorkspaceStore.getVideoProject(id);
+    if (!project) throw new Error('This saved video project is no longer available.');
+    if (!Array.isArray(project.clips) || !project.clips.length) throw new Error('This project has no clips to restore.');
+    const records = await Promise.all(project.clips.map(clip => WorkspaceStore.get(clip.fileId)));
+    const missing = records.findIndex(record => !record?.file);
+    if (missing >= 0) throw new Error(`The source clip “${project.clips[missing].fileName || `clip ${missing + 1}`}” is missing from this device. Keep project source clips in your workspace to reopen this edit.`);
+    const videoFiles = records.map(record => record.file);
+    if (editor(videoFiles, project) === false) return false;
+    return true;
+  }
+  window.addEventListener('beforeunload', event => { if (!projectDirty) return; event.preventDefault(); event.returnValue = ''; });
+  window.TransformoVideoEditor = { open: editor, openProject, addClips, importSubtitles: importSrt, currentProjectId: () => projectId, hasWorkspace: () => !!root()?.querySelector('#video-editor') };
 })();

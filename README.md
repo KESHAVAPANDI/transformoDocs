@@ -40,7 +40,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, preview DOCX pages before creating a visual PDF, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions, with paragraph text auto-fitted inside its original Word page box. OCR scanned PDFs in an expandable set of languages, translate related text blocks with the browser Translator API when available, compare original and transformed pages, and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
-| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, translate timed subtitle cues, preview them in place, burn them into a WebM export, and export the subtitle track separately. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, translate timed subtitle cues, preview them in place, burn them into a WebM export, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, and subtitle cues later. |
 
 ### Small details, big difference
 
@@ -93,11 +93,11 @@ transformoDocs/
 ├── app.js              # App navigation and task workflows
 ├── document-engine.js  # In-browser PDF and image/text conversion
 ├── ocr.css             # OCR controls
-├── workspace-store.js  # Device-local file shelf backed by IndexedDB
+├── workspace-store.js  # Device-local file shelf and video projects backed by IndexedDB
 ├── workspace.css       # Saved-file selection and workspace controls
 ├── feedback.css        # Toast feedback above dialogs
 ├── tool-workspace.css  # Full-page document tools and page previews
-├── video-engine.js     # Local multi-clip timeline, trim, captions, and WebM export
+├── video-engine.js     # Local multi-clip projects, trim, captions, SRT, and WebM export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
 ```
@@ -117,7 +117,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the browser's built-in Translator API and translates from English. Transitions and MP4 export are not implemented yet.
 - DOCX editing and DOCX-to-PDF use a browser-rendered page preview; editing overlays editable paragraphs at their source page positions and exports each page as an image. This is a best-effort rendering rather than a pixel-perfect Word export, and the PDF text is not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. DOCX paragraph editing is supported, while native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
-- Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
+- Files and saved video projects are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Video projects refer to source clips in the local workspace, and Transformo prevents removing a clip while a saved project still uses it. Save changes manually; unsaved edits trigger a leave/reload warning. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
 ## 💡 More ideas worth exploring
 
