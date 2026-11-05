@@ -234,11 +234,13 @@ $('#video-upload').addEventListener('click',()=>$('#video-input').click());$('#v
 window.addEventListener('transformo:video-files-added',event=>addFiles(event.detail.files,'video'));
 $('#video-projects').addEventListener('click',e=>{const button=e.target.closest('[data-open-video-index]');if(!button)return;const file=files.filter(item=>item.kind==='video')[Number(button.dataset.openVideoIndex)];if(file)TransformoVideoEditor.open(file.file)});
 const fileDropOverlay=$('#file-drop-overlay');
-function isFileDrag(event){return [...(event.dataTransfer?.types||[])].includes('Files')}
+function isFileDrag(event){const transfer=event.dataTransfer;if(!transfer)return false;return [...(transfer.types||[])].some(type=>String(type).toLowerCase()==='files')||[...(transfer.items||[])].some(item=>item.kind==='file')}
 function showFileDrop(event){if(!isFileDrag(event))return;event.preventDefault();const videoPage=$('#videos-view').classList.contains('visible')||($('#tool-view').classList.contains('visible')&&previousView==='videos');$('#file-drop-title').textContent=videoPage?'Drop video clips here':'Drop files here';$('#file-drop-description').textContent=videoPage?'Add clips to your local video timeline.':'Release to add them to your local workspace.';fileDropOverlay.hidden=false}
-document.addEventListener('dragenter',showFileDrop);document.addEventListener('dragover',showFileDrop);
-document.addEventListener('dragleave',event=>{if(isFileDrag(event)&&(!event.relatedTarget||!document.documentElement.contains(event.relatedTarget)))fileDropOverlay.hidden=true});
-document.addEventListener('drop',async event=>{if(!isFileDrag(event))return;event.preventDefault();fileDropOverlay.hidden=true;const incoming=[...event.dataTransfer.files];if($('#videos-view').classList.contains('visible')||($('#tool-view').classList.contains('visible')&&previousView==='videos')){const clips=incoming.filter(file=>file.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/i.test(file.name));if(!clips.length){toast('Drop one or more video files to start an edit.');return}await addFiles(clips,'video');setView('videos');TransformoVideoEditor.open(clips)}else await addFiles(incoming)});
+document.addEventListener('dragenter',showFileDrop,true);document.addEventListener('dragover',showFileDrop,true);
+function hideFileDrop(){fileDropOverlay.hidden=true}
+document.addEventListener('dragleave',event=>{if(isFileDrag(event)&&(!event.relatedTarget||!document.documentElement.contains(event.relatedTarget)))hideFileDrop()},true);
+document.addEventListener('dragend',hideFileDrop,true);window.addEventListener('blur',()=>hideFileDrop());
+document.addEventListener('drop',async event=>{if(!isFileDrag(event))return;event.preventDefault();fileDropOverlay.hidden=true;const incoming=[...event.dataTransfer.files];if($('#videos-view').classList.contains('visible')||($('#tool-view').classList.contains('visible')&&previousView==='videos')){const clips=incoming.filter(file=>file.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/i.test(file.name));if(!clips.length){toast('Drop one or more video files to start an edit.');return}await addFiles(clips,'video');setView('videos');TransformoVideoEditor.open(clips)}else await addFiles(incoming)},true);
 $('#tool-back').addEventListener('click',closeTool);$('#tool-cta').addEventListener('click',performCurrentTask);
 $('#tool-content').addEventListener('click',event=>{
   const swap=event.target.closest('[data-language-swap]');
