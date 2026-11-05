@@ -69,6 +69,12 @@
 .timeline-clip-actions button:disabled{opacity:.3;cursor:default}
 .timeline-empty{padding:18px;border:1px dashed rgba(255,255,255,.11);border-radius:9px;color:#92939e;font-size:9px;text-align:center}
 .video-timeline{margin-top:12px;padding:10px 12px}
+.timeline-rail{position:relative;display:flex;align-items:center;height:22px;flex:1;cursor:pointer;touch-action:none;outline:none}
+.timeline-rail::before{position:absolute;right:0;left:0;height:4px;border-radius:4px;background:#454651;content:""}
+.timeline-rail:focus-visible::before{outline:2px solid rgba(190,175,255,.75);outline-offset:3px}
+.timeline-rail[aria-disabled="true"]{cursor:default;opacity:.5}
+.timeline-fill{position:relative;z-index:1;height:4px;width:0;border-radius:4px;background:linear-gradient(90deg,#ac9af2,#87dbbf);pointer-events:none}
+.timeline-fill::after{position:absolute;top:50%;right:-5px;width:10px;height:10px;border:2px solid rgba(221,214,255,.92);border-radius:50%;background:#a995ed;box-shadow:0 2px 9px rgba(0,0,0,.35);content:"";transform:translateY(-50%)}
 .video-editor-status{font-size:9px}
 .subtitle-preview{position:absolute;z-index:2;bottom:12px;left:50%;transform:translateX(-50%);width:max-content;max-width:84%;padding:7px 12px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(9,10,15,.82);color:#fff;text-align:center;font-size:clamp(12px,1.8vw,20px);line-height:1.4;white-space:pre-wrap;pointer-events:none;box-shadow:0 5px 24px rgba(0,0,0,.35)}
 .subtitle-track-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0 0 8px}

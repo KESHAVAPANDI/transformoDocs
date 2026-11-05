@@ -40,7 +40,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to editable Word text, plain text, PNG, or JPG, preview DOCX pages before creating a visual PDF or exporting PNG/JPG page images, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions; undo or redo either editor's changes, reset to the source text, and download an editable DOCX or a visual PDF. Translate Word documents to an editable DOCX or image-backed PDF while retaining paragraph structure and source styles where possible. Undo or restore a translation, or keep up to three recent language-pair results in the current session and switch between them without translating again. OCR scanned PDFs in an expandable set of languages, translate related text blocks on-device first, or choose an optional Azure Translator or DeepL online fallback after consent. Compare matching original and translated PDF pages side by side and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
-| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, choose hard cuts or fade-through-black transitions, select classic, glass, or outlined captions, import and edit SRT captions, choose source and target languages with buttons, translate timed subtitle cues locally first or through Azure Translator/DeepL after consent, preview them in place, burn them into an MP4 export when the browser supports it or WebM otherwise, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, transitions, caption style, subtitle cues, and their source/target language pair later. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, scrub and keyboard-seek across the combined timeline, reorder or remove clips, choose hard cuts or fade-through-black transitions, select classic, glass, or outlined captions, import and edit SRT captions, choose source and target languages with buttons, translate timed subtitle cues locally first or through Azure Translator/DeepL after consent, preview them in place, burn them into an MP4 export when the browser supports it or WebM otherwise, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, transitions, caption style, subtitle cues, and their source/target language pair later. |
 
 ### Small details, big difference
 
@@ -108,7 +108,7 @@ The next step is to expand format coverage and make the layout-aware workflows m
 2. **Improve layout translation.** The PDF workflow groups related lines, preserves page anchors, and flags overflow. Improve complex columns, font matching, non-white backgrounds, and human correction for photographed or scanned pages.
 3. **Extend reversible editing.** Add structured change records and a clear before/after comparison across editing workflows.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
-5. **Grow the video studio.** Add visual timeline scrubbing, richer clip transforms, and an export path with broader codec support.
+5. **Grow the video studio.** Add richer clip transforms, layered audio controls, and an export path with broader codec support.
 6. **Keep privacy visible.** Prefer local processing where practical, explain when a task needs a server, and make file retention clear.
 
 For layout-preserving translation, **“preserve positions” should mean preserving each text block’s anchor and page geometry, then adapting font size or line breaks inside that block**. Some translations are longer than their source; the product should surface those collisions for a human to resolve.
@@ -137,6 +137,7 @@ transformoDocs/
 ├── tool-workspace.css  # Full-page document tools and page previews
 ├── video-export-format.js # Browser-supported MP4/WebM recorder selection
 ├── video-transition.js   # Timeline-safe transition opacity calculations
+├── video-timeline.js     # Combined timeline and trimmed source time mapping
 ├── video-caption-style.js # Shared caption presets for preview and export
 ├── video-engine.js     # Local multi-clip projects, trim, captions, SRT, and video export
 ├── assets/preview.svg  # README workspace illustration

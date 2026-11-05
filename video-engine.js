@@ -28,8 +28,19 @@
   }
   function escape(event) { if (event.key === 'Escape' && clips.length) close(); }
   function totalDuration() { return clips.reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
-  function timelineOffset(index) { return clips.slice(0, index).reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
-  function timelineTime(index, sourceTime) { const clip = clips[index]; return clip ? timelineOffset(index) + Math.max(0, Math.min(clip.end - clip.start, sourceTime - clip.start)) : 0; }
+  function timelineTime(index, sourceTime) { return window.TransformoVideoTimeline.positionAt(clips, index, sourceTime); }
+  function renderTimelineClock(position = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || clips[activeClip]?.start || 0)) {
+    const workspace = root(), duration = totalDuration(), current = workspace?.querySelector('#video-current-time'), total = workspace?.querySelector('#video-duration'), rail = workspace?.querySelector('#timeline-scrubber'), fill = workspace?.querySelector('.timeline-fill');
+    if (current) current.textContent = format(position);
+    if (total) total.textContent = format(duration);
+    if (fill) fill.style.width = `${duration ? Math.max(0, Math.min(100, position / duration * 100)) : 0}%`;
+    if (rail) { rail.setAttribute('aria-valuemax', String(Math.round(duration))); rail.setAttribute('aria-valuenow', String(Math.round(position))); }
+  }
+  async function seekTimeline(position, resume = false) {
+    const target = window.TransformoVideoTimeline.locatePosition(clips, position); if (!target) return;
+    const video = root()?.querySelector('#source-video'); if (!video) return;
+    await showClip(target.index, { time: target.time, resume });
+  }
   function subtitleAt(time) { return subtitles.find(cue => time >= cue.start && time < cue.end)?.text.trim() || ''; }
   function invalidateExports() {
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
@@ -162,19 +173,35 @@
       <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="import-srt" type="button">Import SRT</button><input id="srt-input" type="file" accept=".srt,application/x-subrip,text/plain" hidden /><button class="secondary-button" id="export-srt" type="button" disabled>Export SRT</button><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-source-language" type="hidden" value="${escapeHtml(savedProject?.captionSourceLanguage || 'en')}" /><div class="caption-language-heading">Translate from</div><div class="caption-language-options" role="group" aria-label="Subtitle source language"><button type="button" class="selected" data-caption-source="en" aria-pressed="true">English</button><button type="button" data-caption-source="es" aria-pressed="false">Español</button><button type="button" data-caption-source="fr" aria-pressed="false">Français</button><button type="button" data-caption-source="ja" aria-pressed="false">日本語</button><button type="button" data-caption-source="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-source="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-source="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-source="zh" aria-pressed="false">中文</button><button type="button" data-caption-source="ko" aria-pressed="false">한국어</button><button type="button" data-caption-source="ar" aria-pressed="false">العربية</button></div><input id="caption-language" type="hidden" value="${escapeHtml(savedProject?.captionTargetLanguage || 'es')}" /><div class="caption-language-heading">Translate to</div><div class="caption-language-options" role="group" aria-label="Subtitle target language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div class="caption-translation-modes" role="group" aria-label="Subtitle translation method"><button type="button" class="selected" data-caption-mode="smart" aria-pressed="true">Smart · local first</button><button type="button" data-caption-mode="online" aria-pressed="false">Online only</button></div><div class="caption-provider-options" role="group" aria-label="Online translation provider"><button type="button" class="${(savedProject?.translationProvider || 'azure') === 'azure' ? 'selected' : ''}" data-caption-provider="azure" aria-pressed="${(savedProject?.translationProvider || 'azure') === 'azure'}">Azure F0 · 2M/month</button><button type="button" class="${savedProject?.translationProvider === 'deepl' ? 'selected' : ''}" data-caption-provider="deepl" aria-pressed="${savedProject?.translationProvider === 'deepl'}">DeepL · 1M total free</button></div><label class="caption-cloud-consent"><input type="checkbox" id="caption-cloud-consent" /><span>Online providers receive subtitle text only when you allow online translation and start the task. Smart mode uses your selected provider if local translation is unavailable.</span></label><div id="subtitle-cues" class="subtitle-cues"></div>
        <div class="caption-style-label">CAPTION STYLE</div><div class="caption-style-options" role="group" aria-label="Subtitle appearance"><button type="button" data-caption-style="classic" aria-pressed="${captionStyle === 'classic'}" class="${captionStyle === 'classic' ? 'selected' : ''}">Classic</button><button type="button" data-caption-style="glass" aria-pressed="${captionStyle === 'glass'}" class="${captionStyle === 'glass' ? 'selected' : ''}">Glass</button><button type="button" data-caption-style="outline" aria-pressed="${captionStyle === 'outline'}" class="${captionStyle === 'outline' ? 'selected' : ''}">Outline</button></div><div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">${projectId ? `Reopening ${escapeHtml(projectName)}…` : 'Add clips and save this timeline as a local project.'}</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
-      <div class="video-timeline"><span>◷</span><div class="timeline-rail"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
+      <div class="video-timeline"><span aria-hidden="true">◷</span><div class="timeline-rail" id="timeline-scrubber" role="slider" tabindex="0" aria-label="Seek video timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
     const sourceLanguage = workspace.querySelector('#caption-source-language').value, targetLanguage = workspace.querySelector('#caption-language').value;
     workspace.querySelectorAll('[data-caption-source]').forEach(button => { const selected = button.dataset.captionSource === sourceLanguage; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
     workspace.querySelectorAll('[data-caption-language]').forEach(button => { const selected = button.dataset.captionLanguage === targetLanguage; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
     const video = workspace.querySelector('#source-video');
-    video.addEventListener('loadedmetadata', () => { if (!clips[activeClip]) return; video.currentTime = clips[activeClip].start; });
+    let advancingClip = false, scrubbing = false, scrubPosition = 0, resumeAfterScrub = false;
+    const advanceToNextClip = () => {
+      if (advancingClip || activeClip >= clips.length - 1) return;
+      advancingClip = true; showClip(activeClip + 1, { resume: true }).catch(error => notify(error.message)).finally(() => { advancingClip = false; });
+    };
+    video.addEventListener('loadedmetadata', () => { if (!clips[activeClip]) return; video.currentTime = clips[activeClip].start; renderTimelineClock(); });
+    video.addEventListener('ended', advanceToNextClip);
     video.addEventListener('timeupdate', () => {
-      workspace.querySelector('#video-current-time').textContent = format(video.currentTime);
-      const clip = clips[activeClip], span = clip ? Math.max(.1, clip.end - clip.start) : 0;
-      workspace.querySelector('.timeline-fill').style.width = `${clip ? Math.min(100, Math.max(0, (video.currentTime - clip.start) / span * 100)) : 0}%`;
-      updateSubtitlePreview();
+      const clip = clips[activeClip], position = timelineTime(activeClip, video.currentTime);
+      renderTimelineClock(position); updateSubtitlePreview(position);
+      if (clip && !video.paused && video.currentTime >= clip.end - .035 && !advancingClip) {
+        if (activeClip < clips.length - 1) advanceToNextClip();
+        else video.pause();
+      }
     });
+    const scrubber = workspace.querySelector('#timeline-scrubber');
+    const pointerPosition = event => { const bounds = scrubber.getBoundingClientRect(), ratio = bounds.width ? Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) : 0; return ratio * totalDuration(); };
+    const updateScrub = event => { scrubPosition = pointerPosition(event); renderTimelineClock(scrubPosition); };
+    scrubber.addEventListener('pointerdown', event => { if (!clips.length) return; event.preventDefault(); scrubber.focus(); scrubber.setPointerCapture(event.pointerId); scrubbing = true; resumeAfterScrub = !video.paused; video.pause(); updateScrub(event); });
+    scrubber.addEventListener('pointermove', event => { if (scrubbing) updateScrub(event); });
+    const finishScrub = event => { if (!scrubbing) return; updateScrub(event); scrubbing = false; seekTimeline(scrubPosition, resumeAfterScrub).catch(error => notify(error.message)); };
+    scrubber.addEventListener('pointerup', finishScrub); scrubber.addEventListener('pointercancel', finishScrub);
+    scrubber.addEventListener('keydown', event => { const current = timelineTime(activeClip, video.currentTime); let next; if (event.key === 'ArrowLeft') next = current - 1; else if (event.key === 'ArrowRight') next = current + 1; else if (event.key === 'PageDown') next = current - 10; else if (event.key === 'PageUp') next = current + 10; else if (event.key === 'Home') next = 0; else if (event.key === 'End') next = totalDuration(); else return; event.preventDefault(); seekTimeline(next, !video.paused).catch(error => notify(error.message)); });
     workspace.querySelector('#video-editor-close').addEventListener('click', () => close());
     workspace.querySelector('#video-project-name').addEventListener('input', event => { restoringProject = false; projectName = event.target.value; markProjectDirty(); });
     workspace.querySelector('#save-video-project').addEventListener('click', saveProject);
@@ -216,7 +243,7 @@
     workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return true;
   }
-  async function showClip(index) {
+  async function showClip(index, { time, resume = false } = {}) {
     if (!clips[index]) return;
     activeClip = index;
     const workspace = root(), video = workspace?.querySelector('#source-video'); if (!video) return;
@@ -227,13 +254,14 @@
         video.src = clip.url; video.load();
       });
     }
-    video.currentTime = clip.start;
-    updateSubtitlePreview();
+    video.currentTime = Math.max(clip.start, Math.min(clip.end, Number.isFinite(time) ? time : clip.start));
+    renderTimelineClock(); updateSubtitlePreview();
     workspace.querySelector('#active-clip-name').textContent = clip.file.name;
     workspace.querySelector('#trim-start').value = clip.start.toFixed(1); workspace.querySelector('#trim-start').max = clip.duration;
     workspace.querySelector('#trim-end').value = clip.end.toFixed(1); workspace.querySelector('#trim-end').max = clip.duration;
-    workspace.querySelector('#video-duration').textContent = format(clip.duration);
+    workspace.querySelector('#video-duration').textContent = format(totalDuration());
     renderTimeline();
+    if (resume) video.play().catch(() => {});
   }
   function renderTimeline() {
     const workspace = root(), list = workspace?.querySelector('#timeline-clips'); if (!list) return;
@@ -265,9 +293,11 @@
     const count = clips.length, duration = totalDuration();
     const summary = workspace.querySelector('#timeline-summary'); if (summary) summary.textContent = `${count} clip${count === 1 ? '' : 's'} · ${format(duration)}`;
     const total = workspace.querySelector('#timeline-duration'); if (total) total.textContent = format(duration);
+    const scrubber = workspace.querySelector('#timeline-scrubber'); if (scrubber) scrubber.setAttribute('aria-disabled', String(!count));
     const button = workspace.querySelector('#export-video'), exportFormat = window.MediaRecorder ? window.TransformoVideoExportFormat.selectVideoExportFormat(type => MediaRecorder.isTypeSupported(type)) : null;
     if (button) { button.disabled = !count || clips.some(clip => clip.end <= clip.start) || !exportFormat; button.innerHTML = exportFormat ? `Export ${exportFormat.extension.toUpperCase()} timeline <span>↗</span>` : 'Video export unavailable'; }
     const save = workspace.querySelector('#save-video-project'); if (save) save.disabled = !count || clips.some(clip => !clip.duration || !(clip.fileId || window.TransformoWorkspaceFiles?.idFor(clip.file)));
+    renderTimelineClock();
   }
   function wrapText(ctx, text, maxWidth) {
     const words = text.split(/\s+/), rows = []; let row = '';
