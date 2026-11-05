@@ -1,10 +1,13 @@
 import http from 'node:http';
+import { createTranslationRequest, extractTranslations } from './translation-provider.mjs';
 
 const host = '127.0.0.1';
 const port = Number(process.env.TRANSFORMO_TRANSLATE_PORT || 8766);
-const apiKey = (process.env.DEEPL_API_KEY || '').trim();
-const apiUrl = process.env.DEEPL_API_URL || (apiKey.endsWith(':fx') ? 'https://api-free.deepl.com/v2/translate' : 'https://api.deepl.com/v2/translate');
-const allowedApiHosts = new Set(['api-free.deepl.com', 'api.deepl.com']);
+const deepLKey = (process.env.DEEPL_API_KEY || '').trim();
+const deepLUrl = process.env.DEEPL_API_URL || (deepLKey.endsWith(':fx') ? 'https://api-free.deepl.com/v2/translate' : 'https://api.deepl.com/v2/translate');
+const azureKey = (process.env.TRANSFORMO_TRANSLATOR_KEY || '').trim();
+const azureRegion = (process.env.TRANSFORMO_TRANSLATOR_REGION || '').trim();
+const providers = new Set(['azure', 'deepl']);
 const requestsByAddress = new Map();
 const maxBodyBytes = 128 * 1024;
 const maxTextBytes = 100 * 1024;
@@ -53,34 +56,33 @@ const server = http.createServer(async (request, response) => {
     response.end(); return;
   }
   const path = new URL(request.url, `http://${host}:${port}`).pathname;
-  if (request.method === 'GET' && path === '/health') { send(response, 200, { ready: !!apiKey }, origin); return; }
+  if (request.method === 'GET' && path === '/health') {
+    const provider = new URL(request.url, `http://${host}:${port}`).searchParams.get('provider') || 'azure';
+    if (!providers.has(provider)) { send(response, 400, { error: 'Unknown translation provider.' }, origin); return; }
+    send(response, 200, { ready: provider === 'azure' ? !!azureKey : !!deepLKey, provider }, origin); return;
+  }
   if (request.method !== 'POST' || path !== '/translate') { send(response, 404, { error: 'Route not found.' }, origin); return; }
   if (!localOrigin(origin)) { send(response, 403, { error: 'The translation bridge accepts requests only from a local Transformo page.' }); return; }
   if (!rateAllowed(request.socket.remoteAddress || 'local')) { send(response, 429, { error: 'Too many translation batches. Wait a minute and try again.' }, origin); return; }
-  if (!apiKey) { send(response, 503, { error: 'Add a DeepL API key to the local environment before using online translation.' }, origin); return; }
-  let destination;
-  try { destination = new URL(apiUrl); } catch { send(response, 500, { error: 'DEEPL_API_URL is not a valid URL.' }, origin); return; }
-  if (destination.protocol !== 'https:' || !allowedApiHosts.has(destination.hostname) || destination.pathname !== '/v2/translate') { send(response, 500, { error: 'DEEPL_API_URL must use an official DeepL translation endpoint.' }, origin); return; }
   try {
     const input = await readJson(request);
+    const provider = String(input?.provider || 'azure');
     const texts = input?.texts, sourceLanguage = String(input?.sourceLanguage || ''), targetLanguage = String(input?.targetLanguage || '');
+    if (!providers.has(provider)) throw Object.assign(new Error('Choose Azure Translator or DeepL as the online provider.'), { statusCode: 400 });
     const languageCode = /^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})?$/;
     if (!Array.isArray(texts) || !texts.length || texts.length > 24 || texts.some(text => typeof text !== 'string' || !text.trim())) throw Object.assign(new Error('Send between 1 and 24 non-empty text blocks per request.'), { statusCode: 400 });
     if (!languageCode.test(sourceLanguage) || !languageCode.test(targetLanguage) || sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) throw Object.assign(new Error('Choose two different supported language codes.'), { statusCode: 400 });
     if (texts.some(text => Buffer.byteLength(text, 'utf8') > 10_000) || texts.reduce((total, text) => total + Buffer.byteLength(text, 'utf8'), 0) > maxTextBytes) throw Object.assign(new Error('This translation batch is too large. Try fewer or shorter text blocks.'), { statusCode: 413 });
-    const apiResponse = await fetch(destination, {
-      method: 'POST',
-      headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: texts, source_lang: sourceLanguage.toUpperCase(), target_lang: targetLanguage.toUpperCase() }),
-      signal: AbortSignal.timeout(45_000)
-    });
+    const { destination, headers, body } = createTranslationRequest(provider, { texts, sourceLanguage, targetLanguage, azureKey, azureRegion, deepLKey, deepLUrl });
+    const apiResponse = await fetch(destination, { method: 'POST', headers, body, signal: AbortSignal.timeout(45_000) });
     const result = await apiResponse.json().catch(() => ({}));
     if (!apiResponse.ok) {
-      const message = typeof result.message === 'string' ? result.message : `DeepL returned HTTP ${apiResponse.status}.`;
-      send(response, apiResponse.status === 456 ? 429 : 502, { error: message }, origin); return;
+      const providerMessage = result.error?.message || result.message;
+      const message = typeof providerMessage === 'string' ? providerMessage : `${provider === 'azure' ? 'Azure Translator' : 'DeepL'} returned HTTP ${apiResponse.status}.`;
+      send(response, apiResponse.status === 456 || apiResponse.status === 429 ? 429 : 502, { error: message }, origin); return;
     }
-    const translations = result.translations?.map(item => item?.text);
-    if (!Array.isArray(translations) || translations.length !== texts.length || translations.some(text => typeof text !== 'string')) { send(response, 502, { error: 'DeepL returned an incomplete translation batch.' }, origin); return; }
+    const translations = extractTranslations(provider, result);
+    if (!Array.isArray(translations) || translations.length !== texts.length || translations.some(text => typeof text !== 'string')) { send(response, 502, { error: `${provider === 'azure' ? 'Azure Translator' : 'DeepL'} returned an incomplete translation batch.` }, origin); return; }
     send(response, 200, { translations }, origin);
   } catch (error) {
     send(response, error.statusCode || (error.name === 'TimeoutError' ? 504 : 500), { error: error.message || 'Online translation failed.' }, origin);
@@ -89,5 +91,5 @@ const server = http.createServer(async (request, response) => {
 
 server.listen(port, host, () => {
   console.log(`Transformo translation bridge listening on http://${host}:${port}`);
-  console.log(apiKey ? 'DeepL key is loaded; no request text or API key is logged.' : 'Set DEEPL_API_KEY in this terminal before translating online.');
+  console.log(azureKey || deepLKey ? `Online provider ready: ${[azureKey && 'Azure Translator', deepLKey && 'DeepL'].filter(Boolean).join(', ')}. No request text or API key is logged.` : 'Set TRANSFORMO_TRANSLATOR_KEY for Azure Translator (free F0 tier) or DEEPL_API_KEY for DeepL.');
 });

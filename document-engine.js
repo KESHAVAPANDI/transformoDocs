@@ -854,9 +854,10 @@
   async function translateTextBlocks(texts, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
     if (!texts.length) return [];
     const mode = translationOptions.mode || 'smart', allowOnline = !!translationOptions.allowOnline;
-    if (mode === 'online' && !allowOnline) throw new Error('Check the online translation consent box before sending text to DeepL.');
+    const provider = translationOptions.provider || 'azure', providerName = provider === 'deepl' ? 'DeepL' : 'Azure Translator';
+    if (mode === 'online' && !allowOnline) throw new Error(`Check the online translation consent box before sending text to ${providerName}.`);
     const translateOnline = async () => {
-      if (!allowOnline) throw new Error('On-device translation is unavailable. Select DeepL online and confirm that document text may be sent to the translation provider.');
+      if (!allowOnline) throw new Error(`On-device translation is unavailable. Select online translation and confirm that document text may be sent to ${providerName}.`);
       const output = [], batches = []; let batch = [], batchBytes = 0;
       for (const text of texts) {
         const bytes = new TextEncoder().encode(text).length;
@@ -868,18 +869,18 @@
       for (const batch of batches) {
         let response;
         try {
-          response = await fetch('http://127.0.0.1:8766/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: batch, sourceLanguage, targetLanguage }) });
-        } catch { throw new Error('The local DeepL bridge is not running. Follow the optional online translation setup in README.md.'); }
+          response = await fetch('http://127.0.0.1:8766/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, texts: batch, sourceLanguage, targetLanguage }) });
+        } catch { throw new Error(`The local ${providerName} bridge is not running. Follow the optional online translation setup in README.md.`); }
         const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || `DeepL translation failed (${response.status}).`);
-        if (!Array.isArray(result.translations) || result.translations.length !== batch.length || result.translations.some(value => typeof value !== 'string')) throw new Error('DeepL returned an incomplete translation batch.');
+        if (!response.ok) throw new Error(result.error || `${providerName} translation failed (${response.status}).`);
+        if (!Array.isArray(result.translations) || result.translations.length !== batch.length || result.translations.some(value => typeof value !== 'string')) throw new Error(`${providerName} returned an incomplete translation batch.`);
         output.push(...result.translations);
         onProgress(output.length, texts.length, { stage: 'online' });
       }
       return output;
     };
     if (mode === 'online') return translateOnline();
-    if (mode === 'local' && !supportsTranslation()) throw new Error('This browser has no on-device Translator API. Switch to Smart or DeepL online to use the optional translation bridge.');
+    if (mode === 'local' && !supportsTranslation()) throw new Error('This browser has no on-device Translator API. Switch to Smart or Online to use the optional translation bridge.');
     if (supportsTranslation()) {
       let translator;
       try {
@@ -894,7 +895,7 @@
         onProgress(0, texts.length, { stage: 'fallback' });
       } finally { translator?.destroy?.(); }
     } else if (!allowOnline) {
-      throw new Error('This browser has no on-device Translator API. Select DeepL online and confirm that document text may be sent to the translation provider.');
+      throw new Error(`This browser has no on-device Translator API. Select Online and confirm that document text may be sent to ${providerName}.`);
     }
     return translateOnline();
   }
