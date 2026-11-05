@@ -273,6 +273,7 @@
 
   function clearDocxEdit(container) {
     if (!container) return;
+    delete container.__transformoReportDocxEdit;
     container.querySelectorAll('.docx-editing-layer').forEach(layer => layer.remove());
     container.querySelectorAll('.docx-editing-masked').forEach(element => element.classList.remove('docx-editing-masked'));
     container.querySelectorAll('section.docx').forEach(page => page.classList.remove('docx-editing-page'));
@@ -287,6 +288,12 @@
       const layer = page.querySelector('.docx-editing-layer');
       if (layer) layer.style.display = edited ? 'block' : 'none';
     });
+  }
+
+  function resetDocxEdit(container) {
+    if (!container) return;
+    container.querySelectorAll('.docx-editing-block').forEach(overlay => { overlay.textContent = overlay.dataset.originalText || ''; });
+    container.__transformoReportDocxEdit?.();
   }
 
   function createDocxEditOverlay(container) {
@@ -317,7 +324,7 @@
       overlay.className = 'docx-editing-block'; overlay.textContent = block.text;
       overlay.contentEditable = 'true'; overlay.spellcheck = true; overlay.setAttribute('role', 'textbox'); overlay.setAttribute('aria-label', `Edit paragraph on page ${block.pageIndex + 1}`); overlay.setAttribute('aria-multiline', 'true');
       Object.assign(overlay.style, { left: `${block.x}px`, top: `${block.y}px`, width: `${block.width}px`, height: `${block.height}px`, fontFamily: block.fontFamily, fontSize: `${block.fontSize}px`, fontWeight: block.fontWeight, fontStyle: block.fontStyle, lineHeight: `${block.lineHeight}px`, textAlign: block.textAlign, textIndent: block.textIndent, direction: block.direction, color: '#171717' });
-      overlay.dataset.baseFontSize = String(block.fontSize); overlay.dataset.baseLineHeight = String(block.lineHeight); overlay.dataset.originalHeight = String(block.height);
+      overlay.dataset.originalText = block.text; overlay.dataset.baseFontSize = String(block.fontSize); overlay.dataset.baseLineHeight = String(block.lineHeight); overlay.dataset.originalHeight = String(block.height);
       block.element.classList.add('docx-editing-masked'); layers.get(block.page).append(overlay);
     });
     const report = () => {
@@ -328,8 +335,10 @@
         overlay.classList.toggle('docx-edit-overflow', overlay.scrollHeight > maxHeight + 1);
       }
       const overflowBlocks = container.querySelectorAll('.docx-editing-block.docx-edit-overflow').length;
-      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length } }));
+      const modifiedBlocks = [...container.querySelectorAll('.docx-editing-block')].filter(overlay => overlay.textContent !== overlay.dataset.originalText).length;
+      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length, modifiedBlocks } }));
     };
+    container.__transformoReportDocxEdit = report;
     container.querySelectorAll('.docx-editing-block').forEach(overlay => overlay.addEventListener('input', report));
     report(); setDocxEditMode(container, 'edited');
     return { pages: pages.length, blocks: blocks.length };
@@ -789,5 +798,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, exportDocxEditedPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
