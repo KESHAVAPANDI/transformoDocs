@@ -179,6 +179,47 @@
     return `Created a PDF from ${files.length} text file${files.length === 1 ? '' : 's'}. Text is rasterized to support Unicode; it will not be searchable.`;
   }
 
+  async function docxToText(input) {
+    requireLibraries('JSZip');
+    const files = Array.isArray(input) ? input : [input];
+    if (!files.length) throw new Error('Choose at least one Word .docx file.');
+    const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', documents = [];
+    for (const file of files) {
+      if (!file?.name?.toLowerCase().endsWith('.docx')) throw new Error('Choose Word .docx files only.');
+      const archive = await JSZip.loadAsync(await file.arrayBuffer()), entry = archive.file('word/document.xml');
+      if (!entry) throw new Error(`${file.name} does not contain a readable Word document body.`);
+      const document = new DOMParser().parseFromString(await entry.async('text'), 'application/xml');
+      if (document.querySelector('parsererror')) throw new Error(`${file.name} has Word document XML that could not be read.`);
+      const body = document.getElementsByTagNameNS(ns, 'body')[0];
+      if (!body) throw new Error(`${file.name} has no readable document body.`);
+      const readText = node => [...node.childNodes].map(child => {
+        if (child.nodeType === Node.TEXT_NODE || child.localName === 't' || child.localName === 'delText') return child.textContent;
+        if (child.localName === 'tab') return '\t';
+        if (child.localName === 'br' || child.localName === 'cr') return '\n';
+        return child.childNodes.length ? readText(child) : '';
+      }).join('');
+      const parts = [];
+      for (const child of body.children) {
+        if (child.namespaceURI !== ns) continue;
+        if (child.localName === 'p') {
+          const text = readText(child).replace(/[\t ]+$/gm, '').trim();
+          if (!text) { parts.push(''); continue; }
+          parts.push(`${child.getElementsByTagNameNS(ns, 'numPr').length ? '• ' : ''}${text}`);
+        } else if (child.localName === 'tbl') {
+          for (const row of [...child.children].filter(node => node.localName === 'tr')) {
+            const cells = [...row.children].filter(node => node.localName === 'tc').map(cell => [...cell.children].filter(node => node.localName === 'p').map(readText).join(' / ').trim());
+            parts.push(cells.join('\t'));
+          }
+        }
+      }
+      const text = parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (!text) throw new Error(`No readable paragraph or table text was found in ${file.name}.`);
+      documents.push(files.length > 1 ? `===== ${file.name} =====\n${text}` : text);
+    }
+    download(new Blob([documents.join('\n\n')], { type: 'text/plain;charset=utf-8' }), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-word-documents'}.txt`);
+    return `Extracted text from ${files.length} Word document${files.length === 1 ? '' : 's'}. Paragraph breaks, list markers, and table columns are preserved.`;
+  }
+
   async function pdfsToImages(input, format = 'png') {
     requireLibraries('JSZip');
     if (!pdfjs) throw new Error('The PDF preview library did not load. Check your connection and reload.');
@@ -436,5 +477,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
