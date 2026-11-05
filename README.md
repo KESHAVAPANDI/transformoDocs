@@ -39,8 +39,8 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | Workspace | What it is for |
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, preview DOCX pages before creating a visual PDF, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
-| **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions, reset edits to the source text, and auto-fit Word paragraph text inside its original page box. OCR scanned PDFs in an expandable set of languages, translate related text blocks with the browser Translator API when available, compare matching original and translated PDF pages side by side, and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
-| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, translate timed subtitle cues, preview them in place, burn them into a WebM export, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, and subtitle cues later. |
+| **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions, reset edits to the source text, and download either an editable DOCX or a visual PDF. OCR scanned PDFs in an expandable set of languages, translate related text blocks on-device first, or choose an optional DeepL online fallback after consent. Compare matching original and translated PDF pages side by side and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, translate timed subtitle cues with local-first or consent-based DeepL options, preview them in place, burn them into a WebM export, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, and subtitle cues later. |
 
 ### Small details, big difference
 
@@ -52,7 +52,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 ## 🚀 Getting started
 
-Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, JSZip, docx-preview, html2canvas, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional Translator API can run:
+Transformo is a static web app: no package manager or build step is required for its local workflows. The app loads PDF.js, pdf-lib, JSZip, docx-preview, html2canvas, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional on-device Translator API can run:
 
 ```bash
 git clone https://github.com/KESHAVAPANDI/transformoDocs.git
@@ -65,7 +65,24 @@ Then open `http://localhost:8000` in a recent Chrome or Edge browser. You can al
 python -m http.server 8000
 ```
 
-Internet access is needed to load the conversion and PDF libraries. The selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
+Internet access is needed to load the conversion and PDF libraries. By default, selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
+
+### Optional online translation
+
+On-device translation is the default. To enable the optional DeepL fallback, create a DeepL API key and run the small local bridge in a second terminal. The bridge binds only to `127.0.0.1`, keeps the API key in the server process, accepts requests only from local Transformo pages, and sends text blocks to DeepL only after you choose online translation and check the consent box. It does not log text or keys.
+
+```powershell
+$secureKey = Read-Host "DeepL API key" -AsSecureString
+$env:DEEPL_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+# Optional: set this only if your DeepL account specifies a different API endpoint.
+# $env:DEEPL_API_URL = "https://api-free.deepl.com/v2/translate"
+node translate-proxy.mjs
+Remove-Item Env:DEEPL_API_KEY
+```
+
+The bridge requires Node.js 18 or newer. Enter the key at the prompt; do not put it in a command, source file, or public deployment.
+
+DeepL's current Developer API plan includes a free one-time allowance of 1,000,000 characters; it does not renew. DeepL's legacy API Free plan offers a monthly quota but is no longer available for new subscriptions. The bridge selects the free endpoint for legacy keys ending in `:fx`, otherwise it uses DeepL's standard endpoint; set `DEEPL_API_URL` if your account shows a different endpoint. Check your plan before use. Online translation sends selected text blocks to DeepL and is subject to that plan's terms and data handling. See [DeepL API plans](https://support.deepl.com/hc/en-us/articles/360021200939-DeepL-API-plans), [API usage and limits](https://support.deepl.com/hc/en-us/articles/360020685720-Usage-count-and-billing-in-DeepL-API), and [DeepL's browser CORS guidance](https://developers.deepl.com/docs/best-practices/cors-requests).
 
 PDF compression is an image-based option for visual fidelity: it redraws each page as a JPEG, so the exported file does not keep searchable text, links, or form fields. Some source PDFs may not shrink; in that case Transformo keeps the original and suggests trying the compact preset.
 
@@ -73,7 +90,7 @@ PDF compression is an image-based option for visual fidelity: it redraws each pa
 
 The next step is to expand format coverage and make the layout-aware workflows more robust. A practical path could look like this:
 
-1. **Expand Office editing.** Make DOCX edits reversible and preserve the source document structure, then add in-place PPTX and spreadsheet editing while retaining their native text, styles, and structures.
+1. **Expand Office editing.** Add undo and finer style preservation for DOCX edits, then add in-place PPTX and spreadsheet editing while retaining their native text, styles, and structures.
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
@@ -92,6 +109,7 @@ transformoDocs/
 ├── video.css           # Video editing controls
 ├── app.js              # App navigation and task workflows
 ├── document-engine.js  # In-browser PDF and image/text conversion
+├── translate-proxy.mjs # Optional local DeepL bridge for consent-based cloud fallback
 ├── ocr.css             # OCR controls
 ├── workspace-store.js  # Device-local file shelf and video projects backed by IndexedDB
 ├── workspace.css       # Saved-file selection and workspace controls
@@ -106,17 +124,17 @@ transformoDocs/
 
 PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and multi-clip video timeline export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
-- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. DOCX editing, translation, and visual conversion also export image-backed PDFs; output text is not searchable or selectable.
+- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. DOCX editing can export a native `.docx` by matching edited body paragraphs back to their original text; text is replaced inside the original paragraph structure and the first run's styling is reused where possible. Unmatched paragraphs stay unchanged and are counted in the completion message. DOCX translation and visual conversion export image-backed PDFs; their output text is not searchable or selectable.
 - Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
 - Page selection for splitting previews up to 80 pages. Enter a page range to extract later pages.
 - Translation previews show up to 24 pages at a time; every page is included in the exported PDF. The in-page editor previews up to 80 pages.
 - Replacement text uses a neutral dark font rather than preserving every source font and color. Translated blocks wrap within the original block area, shrink when needed, and are flagged if they still overflow.
 - OCR can misread low-quality scans, handwriting, rotated text, and complex layouts. Review recognized text before translating or exporting.
-- Translation uses the browser's built-in Translator API when that browser supports the selected language pair. Transformo shows model readiness before starting and reports first-use model download progress. Chrome documents this API for desktop use; other browsers and available language pairs vary. There is no cloud translation fallback, so document text stays on-device. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/).
+- Translation defaults to the browser's built-in Translator API, when available. Transformo shows model readiness before starting and reports first-use model download progress. Chrome documents this API for desktop use; other browsers and language pairs vary. Smart mode tries on-device first and only falls back online after the user enables the DeepL consent checkbox; users can also choose on-device only or online only. The optional bridge requires a user-provided DeepL API key and free-plan quota, and document text leaves the browser only after that explicit choice. No unlimited, no-key, high-quality online API is promised. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/) and the DeepL links above.
 - The language picker follows Chrome's documented language-code list; availability still depends on the browser and selected pair.
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
-- Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the browser's built-in Translator API and translates from English. Transitions and MP4 export are not implemented yet.
-- DOCX editing and DOCX-to-PDF use a browser-rendered page preview; editing overlays editable paragraphs at their source page positions and exports each page as an image. This is a best-effort rendering rather than a pixel-perfect Word export, and the PDF text is not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. DOCX paragraph editing is supported, while native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
+- Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the same local-first, consent-based DeepL option as document translation and translates from English. Transitions and MP4 export are not implemented yet.
+- DOCX editing and DOCX-to-PDF use a browser-rendered page preview. Editing overlays paragraphs at their source page positions and offers native Word output, but longer edits can reflow when opened in Word; first-run character styling is best effort. The PDF export is image-backed and not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. DOCX paragraph editing is supported, while native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
 - Files and saved video projects are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Video projects refer to source clips in the local workspace, and Transformo prevents removing a clip while a saved project still uses it. Save changes manually; unsaved edits trigger a leave/reload warning. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
 ## 💡 More ideas worth exploring

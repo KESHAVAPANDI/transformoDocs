@@ -367,9 +367,66 @@
     return { blob: bytesToBlob(await output.save()), filename: `${safeBase(file.name)}-edited.pdf`, overflowBlocks };
   }
 
-  async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}) {
+  async function exportDocxEditedDocx(file, container) {
+    requireLibraries('JSZip');
+    const overlays = [...(container?.querySelectorAll('.docx-editing-block') || [])];
+    if (!overlays.length) throw new Error('The Word page editor has no editable paragraphs. Choose the file again.');
+    const zip = await JSZip.loadAsync(file), documentPart = zip.file('word/document.xml');
+    if (!documentPart) throw new Error('This Word file has no main document text part.');
+    const xml = await documentPart.async('string'), documentXml = new DOMParser().parseFromString(xml, 'application/xml');
+    if (documentXml.getElementsByTagName('parsererror').length) throw new Error('The Word document XML could not be read.');
+    const wordNs = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', xmlNs = 'http://www.w3.org/XML/1998/namespace';
+    const paragraphs = [...documentXml.getElementsByTagNameNS(wordNs, 'p')];
+    const readWordText = node => {
+      if (node.nodeType !== Node.ELEMENT_NODE || node.namespaceURI !== wordNs || node.localName === 'pPr') return '';
+      if (node.localName === 't' || node.localName === 'delText') return node.textContent || '';
+      if (['tab', 'br', 'cr'].includes(node.localName)) return ' ';
+      return [...node.childNodes].map(readWordText).join('');
+    };
+    const normalize = text => String(text || '').normalize('NFC').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    const paragraphText = paragraphs.map(paragraph => normalize(readWordText(paragraph)));
+    const used = new Set(); let cursor = 0, updatedParagraphs = 0, skippedParagraphs = 0;
+    for (const overlay of overlays) {
+      const original = normalize(overlay.dataset.originalText), edited = normalize(overlay.innerText || overlay.textContent);
+      if (edited === original) continue;
+      let index = paragraphText.findIndex((text, candidate) => candidate >= cursor && !used.has(candidate) && text === original);
+      if (index < 0) index = paragraphText.findIndex((text, candidate) => !used.has(candidate) && text === original);
+      if (index < 0) { skippedParagraphs++; continue; }
+      used.add(index); cursor = Math.max(cursor, index + 1);
+      const paragraph = paragraphs[index], textNodes = [...paragraph.getElementsByTagNameNS(wordNs, 't')];
+      for (const localName of ['tab', 'br', 'cr']) [...paragraph.getElementsByTagNameNS(wordNs, localName)].forEach(node => node.remove());
+      const text = overlay.innerText || overlay.textContent || '';
+      const textParts = text.split(/\r?\n/);
+      if (textNodes.length) {
+        textNodes[0].textContent = textParts[0];
+        textNodes[0].setAttributeNS(xmlNs, 'xml:space', 'preserve');
+        textNodes.slice(1).forEach(node => { node.textContent = ''; });
+        let anchor = textNodes[0];
+        for (const part of textParts.slice(1)) {
+          const lineBreak = documentXml.createElementNS(wordNs, 'w:br'), lineText = documentXml.createElementNS(wordNs, 'w:t');
+          lineText.setAttributeNS(xmlNs, 'xml:space', 'preserve'); lineText.textContent = part;
+          anchor.parentNode.insertBefore(lineBreak, anchor.nextSibling); anchor.parentNode.insertBefore(lineText, lineBreak.nextSibling); anchor = lineText;
+        }
+      } else {
+        const run = documentXml.createElementNS(wordNs, 'w:r'), styleRun = paragraph.getElementsByTagNameNS(wordNs, 'r')[0], style = styleRun?.getElementsByTagNameNS(wordNs, 'rPr')[0];
+        if (style) run.appendChild(style.cloneNode(true));
+        textParts.forEach((part, index) => {
+          if (index) run.appendChild(documentXml.createElementNS(wordNs, 'w:br'));
+          const textElement = documentXml.createElementNS(wordNs, 'w:t'); textElement.setAttributeNS(xmlNs, 'xml:space', 'preserve'); textElement.textContent = part; run.appendChild(textElement);
+        });
+        const properties = paragraph.firstElementChild?.localName === 'pPr' ? paragraph.firstElementChild : null;
+        paragraph.insertBefore(run, properties?.nextSibling || null);
+      }
+      updatedParagraphs++;
+    }
+    if (!updatedParagraphs) throw new Error('No edited paragraph could be matched to the Word document body. Download the visual PDF instead.');
+    zip.file(documentPart.name, new XMLSerializer().serializeToString(documentXml));
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    return { blob, filename: `${safeBase(file.name)}-edited.docx`, updatedParagraphs, skippedParagraphs };
+  }
+
+  async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
     requireLibraries('docx', 'JSZip');
-    if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. Open Transformo in a supported desktop browser to translate Word documents on this device.');
     const pages = [...(container?.querySelectorAll('section.docx') || [])];
     if (!pages.length) throw new Error('The Word page preview is unavailable. Choose the file again.');
     const blocks = [];
@@ -385,16 +442,7 @@
       }
     });
     if (!blocks.length) throw new Error('No readable Word paragraphs were found to translate.');
-    const options = { sourceLanguage, targetLanguage }, availability = await Translator.availability(options);
-    if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
-    const translator = await Translator.create({ ...options, monitor(monitor) { monitor.addEventListener('downloadprogress', event => onProgress(0, blocks.length, { stage: 'download', progress: event.loaded })); } });
-    const translations = [];
-    try {
-      for (const [index, block] of blocks.entries()) {
-        translations.push(await translator.translate(block.text));
-        onProgress(index + 1, blocks.length);
-      }
-    } finally { translator.destroy?.(); }
+    const translations = await translateTextBlocks(blocks.map(block => block.text), sourceLanguage, targetLanguage, onProgress, translationOptions);
     clearDocxTranslation(container);
     const layers = new Map();
     pages.forEach(page => {
@@ -652,6 +700,53 @@
   }
 
   function supportsTranslation() { return typeof window.Translator !== 'undefined'; }
+  async function translateTextBlocks(texts, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
+    if (!texts.length) return [];
+    const mode = translationOptions.mode || 'smart', allowOnline = !!translationOptions.allowOnline;
+    if (mode === 'online' && !allowOnline) throw new Error('Check the online translation consent box before sending text to DeepL.');
+    const translateOnline = async () => {
+      if (!allowOnline) throw new Error('On-device translation is unavailable. Select DeepL online and confirm that document text may be sent to the translation provider.');
+      const output = [], batches = []; let batch = [], batchBytes = 0;
+      for (const text of texts) {
+        const bytes = new TextEncoder().encode(text).length;
+        if (bytes > 10_000) throw new Error('A text block is too large for the online translation service. Edit or split that paragraph, then try again.');
+        if (batch.length >= 24 || batchBytes + bytes > 90_000) { batches.push(batch); batch = []; batchBytes = 0; }
+        batch.push(text); batchBytes += bytes;
+      }
+      if (batch.length) batches.push(batch);
+      for (const batch of batches) {
+        let response;
+        try {
+          response = await fetch('http://127.0.0.1:8766/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: batch, sourceLanguage, targetLanguage }) });
+        } catch { throw new Error('The local DeepL bridge is not running. Follow the optional online translation setup in README.md.'); }
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `DeepL translation failed (${response.status}).`);
+        if (!Array.isArray(result.translations) || result.translations.length !== batch.length || result.translations.some(value => typeof value !== 'string')) throw new Error('DeepL returned an incomplete translation batch.');
+        output.push(...result.translations);
+        onProgress(output.length, texts.length, { stage: 'online' });
+      }
+      return output;
+    };
+    if (mode === 'online') return translateOnline();
+    if (mode === 'local' && !supportsTranslation()) throw new Error('This browser has no on-device Translator API. Switch to Smart or DeepL online to use the optional translation bridge.');
+    if (supportsTranslation()) {
+      let translator;
+      try {
+        const options = { sourceLanguage, targetLanguage }, availability = await Translator.availability(options);
+        if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
+        translator = await Translator.create({ ...options, monitor(monitor) { monitor.addEventListener('downloadprogress', event => onProgress(0, texts.length, { stage: 'download', progress: event.loaded })); } });
+        const output = [];
+        for (const [index, text] of texts.entries()) { output.push(await translator.translate(text)); onProgress(index + 1, texts.length, { stage: 'local' }); }
+        return output;
+      } catch (error) {
+        if (!allowOnline || mode === 'local') throw error;
+        onProgress(0, texts.length, { stage: 'fallback' });
+      } finally { translator?.destroy?.(); }
+    } else if (!allowOnline) {
+      throw new Error('This browser has no on-device Translator API. Select DeepL online and confirm that document text may be sent to the translation provider.');
+    }
+    return translateOnline();
+  }
   function groupParagraphLines(lines) {
     const groups = [];
     for (const line of [...lines].sort((a, b) => b.y - a.y || a.x - b.x)) {
@@ -668,21 +763,11 @@
     }
     return groups;
   }
-  async function translateLines(pages, sourceLanguage, targetLanguage, onProgress = () => {}) {
-    if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. You can still edit the extracted text manually, or open Transformo in a browser that supports on-device translation.');
-    const availability = await Translator.availability({ sourceLanguage, targetLanguage });
-    if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
+  async function translateLines(pages, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
     const blocks = pages.flatMap((page, pageIndex) => groupParagraphLines(page.lines).map((group, blockIndex) => ({ ...group, pageIndex, blockIndex })));
-    let done = 0; const total = blocks.length;
-    const translator = await Translator.create({ sourceLanguage, targetLanguage, monitor(monitor) { monitor.addEventListener('downloadprogress', event => onProgress(0, total, { stage: 'download', progress: event.loaded })); } });
-    try {
-      for (const block of blocks) {
-        const text = block.lines.map(line => line.text).join(' ').replace(/\s+/g, ' ').trim();
-        const translated = await translator.translate(text), id = `${block.pageIndex}:${block.blockIndex}`;
-        for (const line of block.lines) { line.edited = translated; line.translationBlockId = id; line.translationText = translated; }
-        onProgress(++done, total);
-      }
-    } finally { translator.destroy?.(); }
+    const texts = blocks.map(block => block.lines.map(line => line.edited ?? line.text).join(' ').replace(/\s+/g, ' ').trim());
+    const translations = await translateTextBlocks(texts, sourceLanguage, targetLanguage, onProgress, translationOptions);
+    blocks.forEach((block, index) => { const translated = translations[index], id = `${block.pageIndex}:${block.blockIndex}`; for (const line of block.lines) { line.edited = translated; line.translationBlockId = id; line.translationText = translated; } });
     return pages;
   }
 
@@ -798,5 +883,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
