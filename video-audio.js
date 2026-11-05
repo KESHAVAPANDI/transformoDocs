@@ -6,7 +6,11 @@
 
   function volumeFromPercent(value) { return normalizeVolume(Number(value) / 100); }
   function volumePercent(value) { return Math.round(normalizeVolume(value) * 100); }
+  function soundtrackTime(position, duration) {
+    if (!Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) return null;
+    return Math.max(0, position) % duration;
+  }
 
-  root.TransformoVideoAudio = { normalizeVolume, volumeFromPercent, volumePercent };
+  root.TransformoVideoAudio = { normalizeVolume, volumeFromPercent, volumePercent, soundtrackTime };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.TransformoVideoAudio;
 })(globalThis);
