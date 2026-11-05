@@ -1,7 +1,7 @@
 const iconTypes={pdf:'pdf',docx:'docx',doc:'docx',xlsx:'xlsx',xls:'xlsx',pptx:'pptx',ppt:'pptx',mp4:'mp4',mov:'mp4',webm:'mp4'};
 let files=[];
 const workspaceFileIds=new WeakMap();
-let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false, docxTranslationHost=null, docxTranslationReady=false, docxTranslationToken=0, docxEditHost=null, docxEditReady=false, docxEditToken=0, translationAvailabilityToken=0;
+let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, translationResultDocument=null, translationHistory=null, translationLineBaseline=null, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false, docxTranslationHost=null, docxTranslationReady=false, docxTranslationToken=0, docxEditHost=null, docxEditReady=false, docxEditToken=0, translationAvailabilityToken=0;
 const translationLanguages=[['en','English'],['ja','日本語'],['es','Español'],['fr','Français'],['hi','हिन्दी'],['ta','தமிழ்'],['de','Deutsch'],['zh','中文'],['pt','Português'],['ko','한국어'],['ar','العربية'],['it','Italiano'],['ru','Русский'],['nl','Nederlands'],['bn','বাংলা'],['bg','Български'],['cs','Čeština'],['da','Dansk'],['el','Ελληνικά'],['fi','Suomi'],['he','עברית'],['hr','Hrvatski'],['hu','Magyar'],['id','Bahasa Indonesia'],['kn','ಕನ್ನಡ'],['lt','Lietuvių'],['mr','मराठी'],['no','Norsk'],['pl','Polski'],['ro','Română'],['sk','Slovenčina'],['sl','Slovenščina'],['sv','Svenska'],['te','తెలుగు'],['th','ไทย'],['tr','Türkçe'],['uk','Українська'],['vi','Tiếng Việt'],['zh-Hant','繁體中文']];
 const ocrLanguages=[['eng','English'],['jpn','日本語'],['spa','Español'],['fra','Français'],['hin','हिन्दी'],['tam','தமிழ்'],['deu','Deutsch'],['chi_sim','简体中文'],['por','Português'],['kor','한국어'],['ara','العربية'],['ita','Italiano'],['rus','Русский'],['nld','Nederlands'],['ben','বাংলা'],['bul','Български'],['ces','Čeština'],['dan','Dansk'],['ell','Ελληνικά'],['fin','Suomi'],['heb','עברית'],['hrv','Hrvatski'],['hun','Magyar'],['ind','Bahasa Indonesia'],['kan','ಕನ್ನಡ'],['mar','मराठी'],['nor','Norsk'],['pol','Polski'],['ron','Română'],['slk','Slovenčina'],['slv','Slovenščina'],['swe','Svenska'],['tel','తెలుగు'],['tha','ไทย'],['tur','Türkçe'],['ukr','Українська'],['vie','Tiếng Việt'],['chi_tra','繁體中文']];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -71,7 +71,7 @@ function toast(message){const el=$('#toast');el.textContent=message;el.classList
 function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===(view==='tool'?'documents':view)));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='tool'?$('#tool-title').textContent:'Documents';window.scrollTo({top:0,behavior:'smooth'});}
 function openTask(task,conversionPreset=''){
   docxPreviewToken++;docxPreviewReady=false;docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null;docxEditToken++;docxEditReady=false;docxEditHost=null;
-  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;organizeOrder=[];organizePreviewPages=[];selectedSplitPages=new Set();splitPreviewPages=[];workspaceSelectionIds=new Set();selectedConversion='';selectedCompression='balanced';
+  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;translationResultDocument=null;translationHistory=null;translationLineBaseline=null;organizeOrder=[];organizePreviewPages=[];selectedSplitPages=new Set();splitPreviewPages=[];workspaceSelectionIds=new Set();selectedConversion='';selectedCompression='balanced';
   if($('.page-view.visible')?.id!=='tool-view')previousView=$('.page-view.visible')?.id.replace('-view','')||'documents';
   pendingTask=task;selectedConversion=conversionPreset;taskPages=[];selectedTaskFiles=[];
   const configs={Translate:['Translate a document','Translate a PDF or Word document while keeping text anchored to its page.'],Edit:['Edit document text','Change PDF or Word text directly over the page at its original position.'],Organize:['Organize PDF pages','Reorder, rotate, and remove pages while keeping the document in view.'],Convert:['Convert files','Choose a card for PDF, Office, image, or text conversions.'],Merge:['Merge PDFs','Arrange your files, then combine them in that order.'],Split:['Split a PDF','Extract selected pages into a new PDF.'],Compress:['Compress a PDF','Reduce image weight with a selectable quality preset.'],Watermark:['Add a PDF watermark','Stamp a light, centered watermark across every page.'],Number:['Add page numbers','Add a clean page number to the bottom of every page.']};
@@ -161,7 +161,7 @@ async function renderDocxEditWorkspace(file){
 async function renderDocxTranslationWorkspace(file){
   const root=$('#line-editor');if(!root)return;
   const token=++docxTranslationToken;docxTranslationReady=false;docxTranslationHost=null;root.hidden=false;
-  root.innerHTML='<div class="document-preview-heading"><div><strong>Word page translation</strong><span>Preparing the rendered pages…</span></div></div><div class="position-note">Paragraphs translate in their original page boxes. Longer translations may need review. Page rendering is a browser approximation.</div><div class="document-preview-loading"><span class="preview-spinner"></span><span>Rendering Word pages…</span></div><div class="docx-preview-host" aria-label="Word document page preview"></div>';
+  root.innerHTML='<div class="document-preview-heading"><div><strong>Word page translation</strong><span>Preparing the rendered pages…</span></div><div class="document-preview-actions"><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button></div></div><div class="position-note">Paragraphs translate in their original page boxes. Longer translations may need review. Page rendering is a browser approximation.</div><div class="document-preview-loading"><span class="preview-spinner"></span><span>Rendering Word pages…</span></div><div class="docx-preview-host" aria-label="Word document page preview"></div>';
   const host=root.querySelector('.docx-preview-host');
   try{
     const pageCount=await DocumentEngine.renderDocxPreview(file,host);
@@ -172,8 +172,10 @@ async function renderDocxTranslationWorkspace(file){
     const note=root.querySelector('.position-note');
     note.textContent='Translate text in its original page position. Compare the original and translated pages before downloading the image-backed PDF.';
     const tabs=document.createElement('div');tabs.className='docx-translation-tabs document-preview-tabs';tabs.innerHTML='<button type="button" class="document-preview-tab active" data-docx-preview="original">Original</button><button type="button" class="document-preview-tab" data-docx-preview="translated" disabled>Translated</button>';
-    root.querySelector('.document-preview-heading').append(tabs);
+    root.querySelector('.document-preview-actions').prepend(tabs);
     tabs.addEventListener('click',event=>{const button=event.target.closest('[data-docx-preview]');if(!button||button.disabled)return;DocumentEngine.setDocxTranslationMode(host,button.dataset.docxPreview);tabs.querySelectorAll('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab===button))});
+    root.querySelector('#undo-translation').addEventListener('click',undoTranslation);root.querySelector('#redo-translation').addEventListener('click',redoTranslation);
+    updateTranslationHistoryControls();
     updateTaskCta();
   }catch(error){
     if(token!==docxTranslationToken)return;
@@ -308,6 +310,11 @@ function drawTranslationPreview(mode){
   }
   $$('.document-preview-tab[data-document-preview]').forEach(button=>{const selected=button.dataset.documentPreview===mode;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))});
 }
+function capturePdfTranslationState(){return taskPages.flatMap(page=>page.lines.map(line=>JSON.stringify([line.edited??null,line.translationBlockId??null,line.translationText??null])))}
+function restorePdfTranslationState(state){let index=0;for(const page of taskPages)for(const line of page.lines){const [edited,blockId,text]=JSON.parse(state[index++]||'[null,null,null]');if(edited===null)delete line.edited;else line.edited=edited;if(blockId===null)delete line.translationBlockId;else line.translationBlockId=blockId;if(text===null)delete line.translationText;else line.translationText=text}}
+function updateTranslationHistoryControls(){const undo=$('#undo-translation'),redo=$('#redo-translation'),active=!!translatedDocument,hasResult=!!translationResultDocument;if(undo)undo.disabled=!active||!translationHistory?.canUndo;if(redo)redo.disabled=active||!hasResult||!translationHistory?.canRedo;const translatedTab=$('[data-document-preview="translated"]')||$('[data-docx-preview="translated"]'),compareTab=$('[data-document-preview="compare"]');if(translatedTab)translatedTab.disabled=!active;if(compareTab)compareTab.disabled=!active}
+function undoTranslation(){if(!translationHistory||!translatedDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.undo(isDocx?['translated']:capturePdfTranslationState());if(!state)return;translationResultDocument=translatedDocument;translatedDocument=null;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='original'))}else{restorePdfTranslationState(state);drawTranslationPreview('source')}updateTranslationHistoryControls();updateTaskCta();toast('Translation undone. The original stays unchanged; redo to restore this result.')}
+function redoTranslation(){if(!translationHistory||translatedDocument||!translationResultDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.redo(isDocx?['original']:capturePdfTranslationState());if(!state)return;translatedDocument=translationResultDocument;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'translated');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='translated'))}else{restorePdfTranslationState(state);drawTranslationPreview('translated')}updateTranslationHistoryControls();updateTaskCta();toast('Translation restored.')}
 async function renderTranslationPreview(file){
   const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Preparing full-page document preview…</span></div>';
   const preview=await DocumentEngine.renderPdfPages(file);
@@ -316,21 +323,23 @@ async function renderTranslationPreview(file){
   translationPreviews[mode]={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
   const hasScannedPages=taskPages.some(page=>!page.lines.length),ocr=hasScannedPages?ocrPanel():'';
   const overflow=translatedDocument?.overflowLines?`<div class="position-note position-note-warning">${translatedDocument.overflowLines} translated text area${translatedDocument.overflowLines===1?' may':'s may'} overflow its original page region. Check the translated preview before downloading.</div>`:'';
-  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs" role="group" aria-label="Document comparison view"><button type="button" class="document-preview-tab active" data-document-preview="source" aria-pressed="${!translatedDocument}">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" aria-pressed="false" ${translatedDocument?'':'disabled'}>Translated</button><button type="button" class="document-preview-tab" data-document-preview="compare" aria-pressed="false" ${translatedDocument?'':'disabled'}>Compare</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-actions"><div class="document-preview-tabs" role="group" aria-label="Document comparison view"><button type="button" class="document-preview-tab active" data-document-preview="source" aria-pressed="${!translatedDocument}">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" aria-pressed="false" ${translatedDocument?'':'disabled'}>Translated</button><button type="button" class="document-preview-tab" data-document-preview="compare" aria-pressed="false" ${translatedDocument?'':'disabled'}>Compare</button></div><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
   root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{const mode=button.dataset.documentPreview;if(mode==='compare'?translationPreviews.source&&translationPreviews.translated:translationPreviews[mode])drawTranslationPreview(mode)}));
+  root.querySelector('#undo-translation').addEventListener('click',undoTranslation);root.querySelector('#redo-translation').addEventListener('click',redoTranslation);
   if(hasScannedPages)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
-  drawTranslationPreview(translatedDocument?'translated':'source');
+  drawTranslationPreview(translatedDocument?'translated':'source');updateTranslationHistoryControls();
 }
 function discardTranslationResult(){
   if(pendingTask!=='Translate')return;
+  if(translationLineBaseline)restorePdfTranslationState(translationLineBaseline);
   translationPreviews.translated?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
-  translationPreviews.translated=null;translatedDocument=null;
+  translationPreviews.translated=null;translatedDocument=null;translationResultDocument=null;translationHistory=null;translationLineBaseline=null;
   if(docxTranslationHost){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original')}
   const docxTab=$('[data-docx-preview="translated"]');if(docxTab)docxTab.disabled=true;
   const tab=$('[data-document-preview="translated"]');if(tab)tab.disabled=true;
   const compareTab=$('[data-document-preview="compare"]');if(compareTab)compareTab.disabled=true;
   if(translationPreviews.source)drawTranslationPreview('source');
-  updateTaskCta();
+  updateTranslationHistoryControls();updateTaskCta();
 }
 async function runOcrOnCurrentPdf(){
   if(!selectedTaskFiles[0]){toast('Choose a PDF first.');return}
@@ -341,35 +350,40 @@ async function runOcrOnCurrentPdf(){
 function readEditedLines(){let index=0;for(const page of taskPages)for(const line of page.lines){const input=$(`[data-line-index="${index++}"]`);if(input)line.edited=input.value}}
 async function translateCurrentLines(){
   if(!selectedTaskFiles[0]){toast('Choose a document first.');return}
+  if(translationResultDocument&&!translatedDocument)discardTranslationResult();
   if(selectedTaskFiles[0].name.toLowerCase().endsWith('.docx')){
     if(!docxTranslationReady||!docxTranslationHost){toast('Wait for the Word page preview to finish.');return}
+    if(!translationHistory)translationHistory=TransformoEditHistory.createEditHistory(['original']);
     const button=$('#tool-cta');button.disabled=true;
     try{
       const source=$('#source-language').value,target=$('#target-language').value,translationOptions=getTranslationOptions();
       const overflowLines=await DocumentEngine.translateDocxInPlace(docxTranslationHost,source,target,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:detail?.stage==='fallback'?'Switching to DeepL…':detail?.stage==='online'?`Translating online · ${done} of ${total}`:`Translating paragraphs · ${done} of ${total}`},translationOptions);
       button.textContent='Composing translated Word pages…';
       translatedDocument=await DocumentEngine.exportDocxTranslatedPdf(selectedTaskFiles[0],docxTranslationHost,overflowLines,(done,total)=>{button.textContent=`Creating PDF page ${done} of ${total}…`});
+      translationHistory.record(['translated']);translationResultDocument=translatedDocument;updateTranslationHistoryControls();
       const tab=$('[data-docx-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
       button.innerHTML='Download translated PDF <span>↗</span>';
       toast(overflowLines?`Translation ready · ${overflowLines} paragraph${overflowLines===1?' may':'s may'} overflow. Review the page preview.`:'Translated Word document ready · review the page preview before downloading.');
-    }catch(error){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');toast(error.message||'The Word document could not be translated.')}
+    }catch(error){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');translationHistory=null;translationResultDocument=null;translatedDocument=null;updateTranslationHistoryControls();toast(error.message||'The Word document could not be translated.')}
     finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
     return;
   }
   if(!taskPages.length){toast('Choose a text-based PDF first.');return}
   if(!taskPages.some(page=>page.lines.length)){toast('Run OCR on the scanned pages before translating.');return}
-  readEditedLines();const button=$('#tool-cta');button.disabled=true;
+  readEditedLines();if(!translationHistory){translationLineBaseline=capturePdfTranslationState();translationHistory=TransformoEditHistory.createEditHistory(translationLineBaseline)}
+  const button=$('#tool-cta');button.disabled=true;
   try{
     await DocumentEngine.translateLines(taskPages,$('#source-language').value,$('#target-language').value,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:detail?.stage==='fallback'?'Switching to DeepL…':detail?.stage==='online'?`Translating online · ${done} of ${total}`:`Translating document · ${Math.round(done/Math.max(1,total)*100)}%`},getTranslationOptions());
     button.textContent='Composing translated pages…';
     translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true,$('#target-language').value);
+    translationHistory.record(capturePdfTranslationState());translationResultDocument=translatedDocument;
     await renderTranslationPreview(translatedDocument.blob);
     const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
     button.innerHTML='Download translated PDF <span>↗</span>';
     const textLayerNote=translatedDocument.searchableCharacters?`${translatedDocument.searchableCharacters} characters are searchable.`:'The visual PDF is ready; searchable text could not be added.';
     const skippedTextNote=translatedDocument.skippedSearchableCharacters?` ${translatedDocument.skippedSearchableCharacters} characters could not be indexed.`:'';
     toast(translatedDocument.overflowLines?`Translation ready · ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?' may':'s may'} overflow. ${textLayerNote}${skippedTextNote} Review the page preview.`:`Translated document ready · ${textLayerNote}${skippedTextNote} Review the page preview before downloading.`);
-  }catch(error){toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>'}
+  }catch(error){discardTranslationResult();toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
 }
 async function performCurrentTask(){
   const button=$('#tool-cta');button.disabled=true;const label=button.textContent;button.textContent='Working…';

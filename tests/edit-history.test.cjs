@@ -35,3 +35,16 @@ test('history is bounded and unchanged snapshots are ignored', () => {
   assert.deepEqual(history.undo(['2']), ['1']);
   assert.equal(history.undo(['1']), null);
 });
+
+test('undoing a translation restores its source snapshot before starting a different one', () => {
+  const source = [JSON.stringify(['source heading', null, null]), JSON.stringify(['source body', null, null])];
+  const japanese = [JSON.stringify(['日本語の見出し', '0:0', '日本語の見出し']), JSON.stringify(['日本語の本文', '0:1', '日本語の本文'])];
+  const spanish = [JSON.stringify(['título en español', '0:0', 'título en español']), JSON.stringify(['texto en español', '0:1', 'texto en español'])];
+  const history = createEditHistory(source);
+  history.record(japanese);
+
+  assert.deepEqual(history.undo(japanese), source);
+  history.record(spanish);
+  assert.equal(history.redo(spanish), null);
+  assert.deepEqual(history.current, spanish);
+});
