@@ -263,7 +263,7 @@
     try {
       const targetLanguage = workspace.querySelector('#caption-language').value, availability = await Translator.availability({ sourceLanguage: 'en', targetLanguage });
       if (availability === 'unavailable') throw new Error(`The browser has no English → ${targetLanguage} translation model.`);
-      const translator = await Translator.create({ sourceLanguage: 'en', targetLanguage });
+      const translator = await Translator.create({ sourceLanguage: 'en', targetLanguage, monitor(monitor) { monitor.addEventListener('downloadprogress', event => { button.textContent = `Preparing translation model · ${Math.round(event.loaded * 100)}%`; }); } });
       try { for (let index = 0; index < cues.length; index++) { button.textContent = `Translating ${index + 1}/${cues.length}…`; cues[index].text = await translator.translate(cues[index].text); } }
       finally { translator.destroy?.(); }
       invalidateExports(); renderSubtitles(); notify('Translated subtitle track is ready to review.');

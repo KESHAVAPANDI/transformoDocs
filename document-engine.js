@@ -663,9 +663,9 @@
     if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. You can still edit the extracted text manually, or open Transformo in a browser that supports on-device translation.');
     const availability = await Translator.availability({ sourceLanguage, targetLanguage });
     if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
-    const translator = await Translator.create({ sourceLanguage, targetLanguage });
     const blocks = pages.flatMap((page, pageIndex) => groupParagraphLines(page.lines).map((group, blockIndex) => ({ ...group, pageIndex, blockIndex })));
     let done = 0; const total = blocks.length;
+    const translator = await Translator.create({ sourceLanguage, targetLanguage, monitor(monitor) { monitor.addEventListener('downloadprogress', event => onProgress(0, total, { stage: 'download', progress: event.loaded })); } });
     try {
       for (const block of blocks) {
         const text = block.lines.map(line => line.text).join(' ').replace(/\s+/g, ' ').trim();
