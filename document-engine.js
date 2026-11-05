@@ -9,6 +9,11 @@
     if (missing.length) throw new Error(`Could not load ${missing.join(', ')}. Check your connection and reload Transformo.`);
   }
   function safeBase(name) { return (name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-|-$/g, '') || 'transformo-file').slice(0, 80); }
+  function zipPath(base, target) {
+    const parts = target.startsWith('/') ? [] : base.split('/');
+    for (const part of target.split('/')) { if (!part || part === '.') continue; if (part === '..') parts.pop(); else parts.push(part); }
+    return parts.join('/');
+  }
   function download(blob, filename) {
     const url = URL.createObjectURL(blob), anchor = document.createElement('a');
     anchor.href = url; anchor.download = filename; anchor.click();
@@ -218,6 +223,85 @@
     }
     download(new Blob([documents.join('\n\n')], { type: 'text/plain;charset=utf-8' }), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-word-documents'}.txt`);
     return `Extracted text from ${files.length} Word document${files.length === 1 ? '' : 's'}. Paragraph breaks, list markers, and table columns are preserved.`;
+  }
+
+  async function pptxToText(input) {
+    requireLibraries('JSZip');
+    const files = Array.isArray(input) ? input : [input], documents = [], presentationNs = 'http://schemas.openxmlformats.org/presentationml/2006/main', drawingNs = 'http://schemas.openxmlformats.org/drawingml/2006/main', relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    if (!files.length) throw new Error('Choose at least one PowerPoint .pptx file.');
+    for (const file of files) {
+      if (!file?.name?.toLowerCase().endsWith('.pptx')) throw new Error('Choose PowerPoint .pptx files only.');
+      const archive = await JSZip.loadAsync(await file.arrayBuffer()), presentationEntry = archive.file('ppt/presentation.xml');
+      if (!presentationEntry) throw new Error(`${file.name} does not contain a readable PowerPoint presentation.`);
+      const presentation = new DOMParser().parseFromString(await presentationEntry.async('text'), 'application/xml'), relationshipEntry = archive.file('ppt/_rels/presentation.xml.rels');
+      if (presentation.querySelector('parsererror')) throw new Error(`${file.name} has presentation XML that could not be read.`);
+      const targets = new Map();
+      if (relationshipEntry) {
+        const relationships = new DOMParser().parseFromString(await relationshipEntry.async('text'), 'application/xml');
+        for (const relation of relationships.getElementsByTagName('Relationship')) targets.set(relation.getAttribute('Id'), relation.getAttribute('Target'));
+      }
+      const slideEntries = [...presentation.getElementsByTagNameNS(presentationNs, 'sldId')].map(item => {
+        const target = targets.get(item.getAttributeNS(relNs, 'id')); if (!target) return null;
+        return archive.file(zipPath('ppt', target));
+      }).filter(Boolean);
+      const orderedSlides = slideEntries.length ? slideEntries : Object.keys(archive.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort((a, b) => Number(a.match(/slide(\d+)/)[1]) - Number(b.match(/slide(\d+)/)[1])).map(name => archive.file(name));
+      if (!orderedSlides.length) throw new Error(`No slides were found in ${file.name}.`);
+      const slides = [];
+      for (let index = 0; index < orderedSlides.length; index++) {
+        const slideXml = new DOMParser().parseFromString(await orderedSlides[index].async('text'), 'application/xml');
+        if (slideXml.querySelector('parsererror')) throw new Error(`Slide ${index + 1} in ${file.name} could not be read.`);
+        const paragraphs = [...slideXml.getElementsByTagNameNS(drawingNs, 'p')].map(paragraph => [...paragraph.getElementsByTagNameNS(drawingNs, 't')].map(run => run.textContent).join('').trim()).filter(Boolean);
+        if (paragraphs.length) slides.push(`Slide ${index + 1}\n${paragraphs.join('\n')}`);
+      }
+      if (!slides.length) throw new Error(`No slide text was found in ${file.name}.`);
+      documents.push(files.length > 1 ? `===== ${file.name} =====\n${slides.join('\n\n')}` : slides.join('\n\n'));
+    }
+    download(new Blob([documents.join('\n\n')], { type: 'text/plain;charset=utf-8' }), `${files.length === 1 ? safeBase(files[0].name) : 'transformo-presentations'}.txt`);
+    return `Extracted text from ${files.length} PowerPoint presentation${files.length === 1 ? '' : 's'} in slide order.`;
+  }
+
+  async function xlsxToCsv(input) {
+    requireLibraries('JSZip');
+    const files = Array.isArray(input) ? input : [input], outputs = [];
+    if (!files.length) throw new Error('Choose at least one Excel .xlsx file.');
+    const spreadsheetNs = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', documentRelNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships', packageRelNs = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const columnIndex = address => { const letters = address.match(/^[A-Z]+/i)?.[0]?.toUpperCase() || 'A'; return [...letters].reduce((index, char) => index * 26 + char.charCodeAt(0) - 64, 0) - 1; };
+    const csvCell = (value, isText) => { let text = String(value ?? ''); if (isText && /^[=+\-@]/.test(text)) text = `'${text}`; return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text; };
+    for (const file of files) {
+      if (!file?.name?.toLowerCase().endsWith('.xlsx')) throw new Error('Choose Excel .xlsx files only.');
+      const archive = await JSZip.loadAsync(await file.arrayBuffer()), workbookEntry = archive.file('xl/workbook.xml'), relsEntry = archive.file('xl/_rels/workbook.xml.rels');
+      if (!workbookEntry || !relsEntry) throw new Error(`${file.name} is missing Excel workbook metadata.`);
+      const workbook = new DOMParser().parseFromString(await workbookEntry.async('text'), 'application/xml'), rels = new DOMParser().parseFromString(await relsEntry.async('text'), 'application/xml');
+      if (workbook.querySelector('parsererror') || rels.querySelector('parsererror')) throw new Error(`${file.name} has Excel metadata that could not be read.`);
+      const relationTargets = new Map([...rels.getElementsByTagNameNS(packageRelNs, 'Relationship')].map(relation => [relation.getAttribute('Id'), relation.getAttribute('Target')]));
+      const sharedEntry = archive.file('xl/sharedStrings.xml'), sharedStrings = sharedEntry ? [...new DOMParser().parseFromString(await sharedEntry.async('text'), 'application/xml').getElementsByTagNameNS(spreadsheetNs, 'si')].map(item => [...item.getElementsByTagNameNS(spreadsheetNs, 't')].map(text => text.textContent).join('')) : [];
+      const sheets = [...workbook.getElementsByTagNameNS(spreadsheetNs, 'sheet')];
+      if (!sheets.length) throw new Error(`No worksheets were found in ${file.name}.`);
+      for (const [sheetIndex, sheet] of sheets.entries()) {
+        const target = relationTargets.get(sheet.getAttributeNS(documentRelNs, 'id'));
+        if (!target) continue;
+        const entry = archive.file(zipPath('xl', target)); if (!entry) continue;
+        const xml = new DOMParser().parseFromString(await entry.async('text'), 'application/xml');
+        if (xml.querySelector('parsererror')) throw new Error(`Worksheet ${sheet.getAttribute('name')} in ${file.name} could not be read.`);
+        const rows = new Map(); let maxRow = -1, maxColumn = -1;
+        for (const cell of xml.getElementsByTagNameNS(spreadsheetNs, 'c')) {
+          const address = cell.getAttribute('r') || '', rowIndex = Math.max(0, Number(address.match(/\d+$/)?.[0] || 1) - 1), colIndex = columnIndex(address), type = cell.getAttribute('t');
+          const valueNode = cell.getElementsByTagNameNS(spreadsheetNs, 'v')[0]; let value = valueNode?.textContent || '', isText = false;
+          if (type === 's') { value = sharedStrings[Number(value)] || ''; isText = true; }
+          else if (type === 'inlineStr') { value = [...cell.getElementsByTagNameNS(spreadsheetNs, 't')].map(text => text.textContent).join(''); isText = true; }
+          else if (type === 'str' || type === 'e') isText = true;
+          else if (type === 'b') value = value === '1' ? 'TRUE' : 'FALSE';
+          const row = rows.get(rowIndex) || []; row[colIndex] = csvCell(value, isText); rows.set(rowIndex, row); maxRow = Math.max(maxRow, rowIndex); maxColumn = Math.max(maxColumn, colIndex);
+        }
+        const csv = Array.from({ length: maxRow + 1 }, (_, rowIndex) => Array.from({ length: maxColumn + 1 }, (_, colIndex) => rows.get(rowIndex)?.[colIndex] || '').join(',')).join('\r\n');
+        const sheetName = sheet.getAttribute('name') || `Sheet${sheetIndex + 1}`;
+        outputs.push({ file, sheetName, name: `${safeBase(file.name)}${sheets.length > 1 || files.length > 1 ? `/${safeBase(sheetName)}` : ''}.csv`, blob: new Blob([csv], { type: 'text/csv;charset=utf-8' }) });
+      }
+    }
+    if (!outputs.length) throw new Error('No readable worksheets were found in these files.');
+    if (outputs.length === 1) download(outputs[0].blob, outputs[0].name);
+    else { const zip = new JSZip(); outputs.forEach(output => zip.file(output.name, output.blob)); download(await zip.generateAsync({ type: 'blob' }), 'transformo-spreadsheets-csv.zip'); }
+    return `Exported ${outputs.length} worksheet${outputs.length === 1 ? '' : 's'} as CSV. Formula cells use their saved values; formatting is not included.`;
   }
 
   async function pdfsToImages(input, format = 'png') {
@@ -477,5 +561,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
