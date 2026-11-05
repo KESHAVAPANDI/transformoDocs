@@ -1,6 +1,6 @@
 /* Local multi-clip video editor using Canvas + MediaRecorder. */
 (() => {
-  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null, projectId = null, projectName = '', projectDirty = false, restoringProject = false, transitionMode = 'cut', captionStyle = 'classic';
+  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null, projectId = null, projectName = '', projectDirty = false, restoringProject = false, transitionMode = 'cut', captionStyle = 'classic', frameAspect = 'landscape', frameFit = 'fit';
   const root = () => document.querySelector('#video-editor-workspace');
   const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   function notify(message) {
@@ -18,7 +18,7 @@
     if (!force && projectDirty && !confirm('This video edit has unsaved changes. Leave without saving?')) return false;
     const workspace = root(); if (workspace) workspace.innerHTML = '';
     clips.forEach(clip => URL.revokeObjectURL(clip.url)); clips = []; subtitles = []; activeClip = 0;
-    projectId = null; projectName = ''; projectDirty = false; restoringProject = false; transitionMode = 'cut'; captionStyle = 'classic';
+    projectId = null; projectName = ''; projectDirty = false; restoringProject = false; transitionMode = 'cut'; captionStyle = 'classic'; frameAspect = 'landscape'; frameFit = 'fit';
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
     if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     if (audioGraph) { audioGraph.destination.stream.getTracks().forEach(track => track.stop()); audioGraph.context.close(); audioGraph = null; }
@@ -36,10 +36,27 @@
     if (fill) fill.style.width = `${duration ? Math.max(0, Math.min(100, position / duration * 100)) : 0}%`;
     if (rail) { rail.setAttribute('aria-valuemax', String(Math.round(duration))); rail.setAttribute('aria-valuenow', String(Math.round(position))); }
   }
+  function resizeFramePreview() {
+    const frame = root()?.querySelector('#video-frame-preview'); if (!frame) return;
+    const aspect = window.TransformoVideoTransform.getAspect(frameAspect);
+    frame.style.maxWidth = `${Math.max(160, Math.round(window.innerHeight * .64 * aspect.width / aspect.height))}px`;
+  }
+  window.addEventListener('resize', resizeFramePreview);
   async function seekTimeline(position, resume = false) {
     const target = window.TransformoVideoTimeline.locatePosition(clips, position); if (!target) return;
     const video = root()?.querySelector('#source-video'); if (!video) return;
     await showClip(target.index, { time: target.time, resume });
+  }
+  function applyFrameSettings() {
+    const workspace = root(), frame = workspace?.querySelector('#video-frame-preview'), canvas = workspace?.querySelector('#render-canvas'), aspect = window.TransformoVideoTransform.getAspect(frameAspect);
+    if (frame) {
+      frame.style.aspectRatio = `${aspect.width} / ${aspect.height}`;
+      resizeFramePreview();
+      frame.style.setProperty('--frame-fit', frameFit === 'fill' ? 'cover' : 'contain');
+    }
+    if (canvas) { const size = window.TransformoVideoTransform.canvasSize(frameAspect); canvas.width = size.width; canvas.height = size.height; }
+    workspace?.querySelectorAll('[data-frame-aspect]').forEach(button => { const selected = button.dataset.frameAspect === frameAspect; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
+    workspace?.querySelectorAll('[data-frame-fit]').forEach(button => { const selected = button.dataset.frameFit === frameFit; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
   }
   function subtitleAt(time) { return subtitles.find(cue => time >= cue.start && time < cue.end)?.text.trim() || ''; }
   function invalidateExports() {
@@ -163,18 +180,19 @@
   function editor(files, savedProject = null) {
     if (!close()) return false;
     const initialFiles = files ? (typeof files[Symbol.iterator] === 'function' && !files.name ? [...files] : [files]) : [];
-    projectId = savedProject?.id || null; projectName = savedProject?.name || initialFiles[0]?.name.replace(/\.[^.]+$/, '') || 'Untitled video edit'; projectDirty = false; restoringProject = !!savedProject; transitionMode = savedProject?.transitionMode === 'fade' ? 'fade' : 'cut'; captionStyle = window.TransformoVideoCaptionStyle.getVideoCaptionStyle(savedProject?.captionStyle).id;
+    projectId = savedProject?.id || null; projectName = savedProject?.name || initialFiles[0]?.name.replace(/\.[^.]+$/, '') || 'Untitled video edit'; projectDirty = false; restoringProject = !!savedProject; transitionMode = savedProject?.transitionMode === 'fade' ? 'fade' : 'cut'; captionStyle = window.TransformoVideoCaptionStyle.getVideoCaptionStyle(savedProject?.captionStyle).id; frameAspect = ['landscape', 'square', 'portrait'].includes(savedProject?.frameAspect) ? savedProject.frameAspect : 'landscape'; frameFit = savedProject?.frameFit === 'fill' ? 'fill' : 'fit';
     subtitles = (savedProject?.subtitles || []).map(cue => ({ start: Number(cue.start) || 0, end: Number(cue.end) || 0, text: String(cue.text || '') }));
     const workspace = root(); if (!workspace) return;
     workspace.innerHTML = `<section class="video-editor glass-panel" id="video-editor" aria-labelledby="video-editor-title">
       <header class="video-editor-header"><div><div class="eyebrow"><span class="live-dot video-dot"></span> LOCAL VIDEO EDITOR</div><h2 id="video-editor-title">Your video timeline</h2><p>Arrange clips, set in and out points, then export one sequence.</p></div><div class="video-project-header-actions"><label class="video-project-name-field"><span>PROJECT NAME</span><input id="video-project-name" type="text" maxlength="80" value="${escapeHtml(projectName)}" aria-label="Video project name" /></label><button class="secondary-button" id="save-video-project" type="button" disabled>${projectId ? 'Save changes' : 'Save project'}</button><button class="video-back-button" id="video-editor-close" type="button">← Back to projects</button></div></header>
-      <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div id="subtitle-preview" class="subtitle-preview" hidden></div></div>
-       <aside class="video-inspector"><div class="inspector-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div><div class="inspector-label transition-label">BETWEEN CLIPS</div><div class="video-transition-options" role="group" aria-label="Clip transition"><button type="button" data-transition-mode="cut" aria-pressed="${transitionMode === 'cut'}" class="${transitionMode === 'cut' ? 'selected' : ''}">Hard cut</button><button type="button" data-transition-mode="fade" aria-pressed="${transitionMode === 'fade'}" class="${transitionMode === 'fade' ? 'selected' : ''}">Fade through black</button></div>
+      <div class="video-editor-grid"><div class="video-stage"><div class="video-frame-preview" id="video-frame-preview"><video id="source-video" controls playsinline></video><div id="subtitle-preview" class="subtitle-preview" hidden></div></div><canvas id="render-canvas" width="1280" height="720" hidden></canvas></div>
+       <aside class="video-inspector"><div class="inspector-label frame-label">OUTPUT FRAME</div><div class="video-frame-aspects" role="group" aria-label="Export aspect ratio"><button type="button" data-frame-aspect="landscape" aria-pressed="${frameAspect === 'landscape'}" class="${frameAspect === 'landscape' ? 'selected' : ''}"><strong>Wide</strong><span>16:9</span></button><button type="button" data-frame-aspect="square" aria-pressed="${frameAspect === 'square'}" class="${frameAspect === 'square' ? 'selected' : ''}"><strong>Square</strong><span>1:1</span></button><button type="button" data-frame-aspect="portrait" aria-pressed="${frameAspect === 'portrait'}" class="${frameAspect === 'portrait' ? 'selected' : ''}"><strong>Portrait</strong><span>9:16</span></button></div><div class="video-frame-fit" role="group" aria-label="Source fitting"><button type="button" data-frame-fit="fit" aria-pressed="${frameFit === 'fit'}" class="${frameFit === 'fit' ? 'selected' : ''}">Fit all</button><button type="button" data-frame-fit="fill" aria-pressed="${frameFit === 'fill'}" class="${frameFit === 'fill' ? 'selected' : ''}">Fill frame</button></div><div class="frame-help">Fill crops the edges. Fit keeps the whole clip visible.</div><div class="inspector-label trim-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div><div class="inspector-label transition-label">BETWEEN CLIPS</div><div class="video-transition-options" role="group" aria-label="Clip transition"><button type="button" data-transition-mode="cut" aria-pressed="${transitionMode === 'cut'}" class="${transitionMode === 'cut' ? 'selected' : ''}">Hard cut</button><button type="button" data-transition-mode="fade" aria-pressed="${transitionMode === 'fade'}" class="${transitionMode === 'fade' ? 'selected' : ''}">Fade through black</button></div>
       <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="import-srt" type="button">Import SRT</button><input id="srt-input" type="file" accept=".srt,application/x-subrip,text/plain" hidden /><button class="secondary-button" id="export-srt" type="button" disabled>Export SRT</button><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-source-language" type="hidden" value="${escapeHtml(savedProject?.captionSourceLanguage || 'en')}" /><div class="caption-language-heading">Translate from</div><div class="caption-language-options" role="group" aria-label="Subtitle source language"><button type="button" class="selected" data-caption-source="en" aria-pressed="true">English</button><button type="button" data-caption-source="es" aria-pressed="false">Español</button><button type="button" data-caption-source="fr" aria-pressed="false">Français</button><button type="button" data-caption-source="ja" aria-pressed="false">日本語</button><button type="button" data-caption-source="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-source="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-source="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-source="zh" aria-pressed="false">中文</button><button type="button" data-caption-source="ko" aria-pressed="false">한국어</button><button type="button" data-caption-source="ar" aria-pressed="false">العربية</button></div><input id="caption-language" type="hidden" value="${escapeHtml(savedProject?.captionTargetLanguage || 'es')}" /><div class="caption-language-heading">Translate to</div><div class="caption-language-options" role="group" aria-label="Subtitle target language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div class="caption-translation-modes" role="group" aria-label="Subtitle translation method"><button type="button" class="selected" data-caption-mode="smart" aria-pressed="true">Smart · local first</button><button type="button" data-caption-mode="online" aria-pressed="false">Online only</button></div><div class="caption-provider-options" role="group" aria-label="Online translation provider"><button type="button" class="${(savedProject?.translationProvider || 'azure') === 'azure' ? 'selected' : ''}" data-caption-provider="azure" aria-pressed="${(savedProject?.translationProvider || 'azure') === 'azure'}">Azure F0 · 2M/month</button><button type="button" class="${savedProject?.translationProvider === 'deepl' ? 'selected' : ''}" data-caption-provider="deepl" aria-pressed="${savedProject?.translationProvider === 'deepl'}">DeepL · 1M total free</button></div><label class="caption-cloud-consent"><input type="checkbox" id="caption-cloud-consent" /><span>Online providers receive subtitle text only when you allow online translation and start the task. Smart mode uses your selected provider if local translation is unavailable.</span></label><div id="subtitle-cues" class="subtitle-cues"></div>
        <div class="caption-style-label">CAPTION STYLE</div><div class="caption-style-options" role="group" aria-label="Subtitle appearance"><button type="button" data-caption-style="classic" aria-pressed="${captionStyle === 'classic'}" class="${captionStyle === 'classic' ? 'selected' : ''}">Classic</button><button type="button" data-caption-style="glass" aria-pressed="${captionStyle === 'glass'}" class="${captionStyle === 'glass' ? 'selected' : ''}">Glass</button><button type="button" data-caption-style="outline" aria-pressed="${captionStyle === 'outline'}" class="${captionStyle === 'outline' ? 'selected' : ''}">Outline</button></div><div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">${projectId ? `Reopening ${escapeHtml(projectName)}…` : 'Add clips and save this timeline as a local project.'}</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
       <div class="video-timeline"><span aria-hidden="true">◷</span><div class="timeline-rail" id="timeline-scrubber" role="slider" tabindex="0" aria-label="Seek video timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
+    applyFrameSettings();
     const sourceLanguage = workspace.querySelector('#caption-source-language').value, targetLanguage = workspace.querySelector('#caption-language').value;
     workspace.querySelectorAll('[data-caption-source]').forEach(button => { const selected = button.dataset.captionSource === sourceLanguage; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
     workspace.querySelectorAll('[data-caption-language]').forEach(button => { const selected = button.dataset.captionLanguage === targetLanguage; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected)); });
@@ -210,6 +228,8 @@
     workspace.querySelector('#timeline-clips').addEventListener('click', timelineAction);
     workspace.querySelector('#trim-start').addEventListener('change', updateTrim);
     workspace.querySelector('#trim-end').addEventListener('change', updateTrim);
+    workspace.querySelectorAll('[data-frame-aspect]').forEach(button => button.addEventListener('click', () => { frameAspect = button.dataset.frameAspect; applyFrameSettings(); invalidateExports(); }));
+    workspace.querySelectorAll('[data-frame-fit]').forEach(button => button.addEventListener('click', () => { frameFit = button.dataset.frameFit; applyFrameSettings(); invalidateExports(); }));
     workspace.querySelectorAll('[data-transition-mode]').forEach(button => button.addEventListener('click', () => {
       transitionMode = button.dataset.transitionMode;
       workspace.querySelectorAll('[data-transition-mode]').forEach(option => { const selected = option === button; option.classList.toggle('selected', selected); option.setAttribute('aria-pressed', String(selected)); });
@@ -342,17 +362,18 @@
     if (!window.MediaRecorder || !canvas.captureStream) { notify('Video export is not supported in this browser. Try a recent Chrome or Edge.'); return; }
     let exportFormat = window.TransformoVideoExportFormat.selectVideoExportFormat(type => MediaRecorder.isTypeSupported(type));
     if (!exportFormat) { notify('This browser does not report support for MP4 or WebM recording.'); return; }
-    const exportClips = clips.map(clip => ({ ...clip })), exportTransitionMode = transitionMode, exportCaptionStyle = captionStyle;
+    const exportClips = clips.map(clip => ({ ...clip })), exportTransitionMode = transitionMode, exportCaptionStyle = captionStyle, exportFrameFit = frameFit, exportFrameAspect = frameAspect;
     if (exportClips.some(clip => clip.end <= clip.start)) { notify('Each clip needs an out point after its in point.'); return; }
-    const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), subtitleLink = workspace.querySelector('#download-subtitles');
+    const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), subtitleLink = workspace.querySelector('#download-subtitles'), frameControls = [...workspace.querySelectorAll('[data-frame-aspect],[data-frame-fit]')];
     if (subtitles.some(cue => cue.end <= cue.start)) { notify('Each subtitle cue needs an end time after its start time.'); return; }
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
     if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     workspace.querySelector('#download-video').hidden = true; subtitleLink.hidden = true;
-    button.disabled = true; status.textContent = 'Preparing a local timeline render…';
+    button.disabled = true; frameControls.forEach(control => { control.disabled = true; }); status.textContent = 'Preparing a local timeline render…';
     let stream, recorder, graph;
     try {
       graph = getAudioGraph(video); if (graph) await graph.context.resume();
+      const frameSize = window.TransformoVideoTransform.canvasSize(exportFrameAspect); canvas.width = frameSize.width; canvas.height = frameSize.height;
       const first = exportClips[0]; await loadVideo(video, first); await seekVideo(video, first.start);
       const context = canvas.getContext('2d'); stream = canvas.captureStream(30);
       const audioTracks = graph?.destination.stream.getAudioTracks() || (video.captureStream?.() || video.mozCaptureStream?.())?.getAudioTracks() || [];
@@ -368,7 +389,7 @@
       const finished = new Promise((resolve, reject) => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || 'video/webm' })); recorder.onerror = () => reject(new Error('The browser could not finish the video render.')); });
       const draw = (timelinePosition = 0, transitionAlpha = 0) => {
         const w = canvas.width, h = canvas.height; context.fillStyle = '#111'; context.fillRect(0, 0, w, h);
-        if (video.readyState >= 2 && video.videoWidth) { const scale = Math.min(w / video.videoWidth, h / video.videoHeight), dw = video.videoWidth * scale, dh = video.videoHeight * scale; context.drawImage(video, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+        if (video.readyState >= 2 && video.videoWidth) { const rect = window.TransformoVideoTransform.frameRect(video.videoWidth, video.videoHeight, w, h, exportFrameFit); if (rect) context.drawImage(video, rect.x, rect.y, rect.width, rect.height); }
         if (transitionAlpha > 0) { context.globalAlpha = transitionAlpha; context.fillStyle = '#000'; context.fillRect(0, 0, w, h); context.globalAlpha = 1; }
         const caption = subtitleAt(timelinePosition);
         if (caption) {
@@ -409,7 +430,7 @@
       status.textContent = `Export ready · ${extension.toUpperCase()} · ${format(duration)} · ${(blob.size / 1048576).toFixed(1)} MB`; notify('Your edited video timeline is ready to download.');
     } catch (error) {
       if (recorder?.state !== 'inactive') recorder?.stop(); if (graph) stream?.getVideoTracks().forEach(track => track.stop()); else stream?.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1; status.textContent = error.message || 'Video export failed.'; notify(status.textContent);
-    } finally { button.disabled = false; updateTotals(); }
+    } finally { frameControls.forEach(control => { control.disabled = false; }); button.disabled = false; updateTotals(); }
   }
   async function saveProject() {
     const workspace = root(), button = workspace?.querySelector('#save-video-project'), status = workspace?.querySelector('#video-editor-status'), input = workspace?.querySelector('#video-project-name');
@@ -419,7 +440,7 @@
     projectName = input?.value.trim() || 'Untitled video edit';
     if (button) { button.disabled = true; button.textContent = 'Saving…'; }
     try {
-      const record = await WorkspaceStore.saveVideoProject({ id: projectId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: projectName, clips: references, subtitles: subtitles.map(cue => ({ start: cue.start, end: cue.end, text: cue.text })), captionSourceLanguage: workspace.querySelector('#caption-source-language').value, captionTargetLanguage: workspace.querySelector('#caption-language').value, translationProvider: workspace.querySelector('[data-caption-provider].selected')?.dataset.captionProvider || 'azure', transitionMode, captionStyle });
+      const record = await WorkspaceStore.saveVideoProject({ id: projectId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: projectName, clips: references, subtitles: subtitles.map(cue => ({ start: cue.start, end: cue.end, text: cue.text })), captionSourceLanguage: workspace.querySelector('#caption-source-language').value, captionTargetLanguage: workspace.querySelector('#caption-language').value, translationProvider: workspace.querySelector('[data-caption-provider].selected')?.dataset.captionProvider || 'azure', transitionMode, captionStyle, frameAspect, frameFit });
       projectId = record.id; projectName = record.name; projectDirty = false; restoringProject = false;
       if (input) input.value = projectName;
       if (status) status.textContent = `Saved locally · ${new Date(record.updatedAt).toLocaleTimeString()}`;
