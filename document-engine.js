@@ -273,6 +273,12 @@
 
   function clearDocxEdit(container) {
     if (!container) return;
+    if (container.__transformoDocxHistory?.timer) clearTimeout(container.__transformoDocxHistory.timer);
+    delete container.__transformoDocxHistory;
+    delete container.__transformoUndoDocxEdit;
+    delete container.__transformoRedoDocxEdit;
+    if (container.__transformoDocxUndoKeydown) container.removeEventListener('keydown', container.__transformoDocxUndoKeydown);
+    delete container.__transformoDocxUndoKeydown;
     delete container.__transformoReportDocxEdit;
     container.querySelectorAll('.docx-editing-layer').forEach(layer => layer.remove());
     container.querySelectorAll('.docx-editing-masked').forEach(element => element.classList.remove('docx-editing-masked'));
@@ -292,8 +298,39 @@
 
   function resetDocxEdit(container) {
     if (!container) return;
+    pushDocxEditSnapshot(container);
     container.querySelectorAll('.docx-editing-block').forEach(overlay => { overlay.textContent = overlay.dataset.originalText || ''; });
+    pushDocxEditSnapshot(container);
     container.__transformoReportDocxEdit?.();
+  }
+
+  function readDocxEditSnapshot(container) {
+    return [...container.querySelectorAll('.docx-editing-block')].map(overlay => overlay.innerText || overlay.textContent || '');
+  }
+
+  function pushDocxEditSnapshot(container) {
+    const history = container.__transformoDocxHistory;
+    if (!history) return;
+    if (history.timer) clearTimeout(history.timer);
+    history.timer = null;
+    const snapshot = readDocxEditSnapshot(container), previous = history.snapshots[history.index];
+    if (previous && previous.length === snapshot.length && previous.every((value, index) => value === snapshot[index])) return;
+    history.snapshots = history.snapshots.slice(0, history.index + 1);
+    history.snapshots.push(snapshot);
+    if (history.snapshots.length > 40) history.snapshots.shift();
+    history.index = history.snapshots.length - 1;
+  }
+
+  function moveDocxEditHistory(container, direction) {
+    const history = container.__transformoDocxHistory;
+    if (!history) return false;
+    pushDocxEditSnapshot(container);
+    const next = history.index + direction;
+    if (next < 0 || next >= history.snapshots.length) return false;
+    history.index = next;
+    [...container.querySelectorAll('.docx-editing-block')].forEach((overlay, index) => { overlay.textContent = history.snapshots[next][index] || ''; });
+    container.__transformoReportDocxEdit?.();
+    return true;
   }
 
   function createDocxEditOverlay(container) {
@@ -327,6 +364,7 @@
       overlay.dataset.originalText = block.text; overlay.dataset.baseFontSize = String(block.fontSize); overlay.dataset.baseLineHeight = String(block.lineHeight); overlay.dataset.originalHeight = String(block.height);
       block.element.classList.add('docx-editing-masked'); layers.get(block.page).append(overlay);
     });
+    container.__transformoDocxHistory = { snapshots: [readDocxEditSnapshot(container)], index: 0, timer: null };
     const report = () => {
       for (const overlay of container.querySelectorAll('.docx-editing-block')) {
         let size = Number(overlay.dataset.baseFontSize), lineHeight = Number(overlay.dataset.baseLineHeight), maxHeight = Number(overlay.dataset.originalHeight);
@@ -336,10 +374,30 @@
       }
       const overflowBlocks = container.querySelectorAll('.docx-editing-block.docx-edit-overflow').length;
       const modifiedBlocks = [...container.querySelectorAll('.docx-editing-block')].filter(overlay => overlay.textContent !== overlay.dataset.originalText).length;
-      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length, modifiedBlocks } }));
+      const history = container.__transformoDocxHistory, current = readDocxEditSnapshot(container), saved = history?.snapshots[history.index];
+      const pendingEdit = !!saved && (saved.length !== current.length || saved.some((value, index) => value !== current[index]));
+      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length, modifiedBlocks, canUndo: !!history && (history.index > 0 || pendingEdit), canRedo: !!history && history.index < history.snapshots.length - 1 } }));
     };
     container.__transformoReportDocxEdit = report;
-    container.querySelectorAll('.docx-editing-block').forEach(overlay => overlay.addEventListener('input', report));
+    container.__transformoUndoDocxEdit = () => moveDocxEditHistory(container, -1);
+    container.__transformoRedoDocxEdit = () => moveDocxEditHistory(container, 1);
+    container.__transformoDocxUndoKeydown = event => {
+      if (!(event.ctrlKey || event.metaKey) || !container.contains(event.target)) return;
+      const key = event.key.toLowerCase(), undo = key === 'z' && !event.shiftKey, redo = key === 'y' || (key === 'z' && event.shiftKey);
+      if (!undo && !redo) return;
+      event.preventDefault();
+      (undo ? container.__transformoUndoDocxEdit : container.__transformoRedoDocxEdit)?.();
+    };
+    container.addEventListener('keydown', container.__transformoDocxUndoKeydown);
+    container.querySelectorAll('.docx-editing-block').forEach(overlay => {
+      overlay.addEventListener('input', () => {
+        report();
+        const history = container.__transformoDocxHistory;
+        if (history?.timer) clearTimeout(history.timer);
+        if (history) history.timer = setTimeout(() => pushDocxEditSnapshot(container), 400);
+      });
+      overlay.addEventListener('blur', () => pushDocxEditSnapshot(container));
+    });
     report(); setDocxEditMode(container, 'edited');
     return { pages: pages.length, blocks: blocks.length };
   }
@@ -1048,5 +1106,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
