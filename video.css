@@ -93,3 +93,10 @@
 .video-transition-options button{min-height:31px;padding:5px 7px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(255,255,255,.03);color:#aeb0bb;font:8px var(--font);transition:background .18s,border-color .18s,color .18s}
 .video-transition-options button:hover{border-color:rgba(169,151,255,.32);color:#eee}
 .video-transition-options button.selected{border-color:rgba(169,151,255,.38);background:rgba(169,151,255,.12);color:#e6deff}
+.caption-style-label{margin:13px 0 6px;color:#a6a7b1;font-size:8px;font-weight:650;letter-spacing:.7px}
+.caption-style-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:0 0 9px}
+.caption-style-options button{min-height:28px;padding:4px;border:1px solid rgba(255,255,255,.09);border-radius:7px;background:rgba(255,255,255,.03);color:#aeb0bb;font:8px var(--font);transition:background .18s,border-color .18s,color .18s}
+.caption-style-options button:hover{border-color:rgba(169,151,255,.32);color:#eee}
+.caption-style-options button.selected{border-color:rgba(169,151,255,.38);background:rgba(169,151,255,.12);color:#e6deff}
+.subtitle-preview[data-caption-style="glass"]{border-color:rgba(210,204,255,.24);background:rgba(23,25,37,.58);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.subtitle-preview[data-caption-style="outline"]{border-color:transparent;background:transparent;box-shadow:none;text-shadow:0 2px 2px #090a0e,1px 0 #090a0e,-1px 0 #090a0e,0 1px #090a0e,0 -1px #090a0e}

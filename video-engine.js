@@ -1,6 +1,6 @@
 /* Local multi-clip video editor using Canvas + MediaRecorder. */
 (() => {
-  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null, projectId = null, projectName = '', projectDirty = false, restoringProject = false, transitionMode = 'cut';
+  let clips = [], subtitles = [], activeClip = 0, exportUrl = null, subtitleUrl = null, audioGraph = null, projectId = null, projectName = '', projectDirty = false, restoringProject = false, transitionMode = 'cut', captionStyle = 'classic';
   const root = () => document.querySelector('#video-editor-workspace');
   const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   function notify(message) {
@@ -18,7 +18,7 @@
     if (!force && projectDirty && !confirm('This video edit has unsaved changes. Leave without saving?')) return false;
     const workspace = root(); if (workspace) workspace.innerHTML = '';
     clips.forEach(clip => URL.revokeObjectURL(clip.url)); clips = []; subtitles = []; activeClip = 0;
-    projectId = null; projectName = ''; projectDirty = false; restoringProject = false; transitionMode = 'cut';
+    projectId = null; projectName = ''; projectDirty = false; restoringProject = false; transitionMode = 'cut'; captionStyle = 'classic';
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
     if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
     if (audioGraph) { audioGraph.destination.stream.getTracks().forEach(track => track.stop()); audioGraph.context.close(); audioGraph = null; }
@@ -48,7 +48,7 @@
   }
   function updateSubtitlePreview(time = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || 0)) {
     const preview = root()?.querySelector('#subtitle-preview'); if (!preview) return;
-    const value = subtitleAt(time); preview.textContent = value; preview.hidden = !value;
+    const value = subtitleAt(time); preview.textContent = value; preview.dataset.captionStyle = captionStyle; preview.hidden = !value;
   }
   function renderSubtitles() {
     const list = root()?.querySelector('#subtitle-cues'); if (!list) return;
@@ -152,7 +152,7 @@
   function editor(files, savedProject = null) {
     if (!close()) return false;
     const initialFiles = files ? (typeof files[Symbol.iterator] === 'function' && !files.name ? [...files] : [files]) : [];
-    projectId = savedProject?.id || null; projectName = savedProject?.name || initialFiles[0]?.name.replace(/\.[^.]+$/, '') || 'Untitled video edit'; projectDirty = false; restoringProject = !!savedProject; transitionMode = savedProject?.transitionMode === 'fade' ? 'fade' : 'cut';
+    projectId = savedProject?.id || null; projectName = savedProject?.name || initialFiles[0]?.name.replace(/\.[^.]+$/, '') || 'Untitled video edit'; projectDirty = false; restoringProject = !!savedProject; transitionMode = savedProject?.transitionMode === 'fade' ? 'fade' : 'cut'; captionStyle = window.TransformoVideoCaptionStyle.getVideoCaptionStyle(savedProject?.captionStyle).id;
     subtitles = (savedProject?.subtitles || []).map(cue => ({ start: Number(cue.start) || 0, end: Number(cue.end) || 0, text: String(cue.text || '') }));
     const workspace = root(); if (!workspace) return;
     workspace.innerHTML = `<section class="video-editor glass-panel" id="video-editor" aria-labelledby="video-editor-title">
@@ -160,7 +160,7 @@
       <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div id="subtitle-preview" class="subtitle-preview" hidden></div></div>
        <aside class="video-inspector"><div class="inspector-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div><div class="inspector-label transition-label">BETWEEN CLIPS</div><div class="video-transition-options" role="group" aria-label="Clip transition"><button type="button" data-transition-mode="cut" aria-pressed="${transitionMode === 'cut'}" class="${transitionMode === 'cut' ? 'selected' : ''}">Hard cut</button><button type="button" data-transition-mode="fade" aria-pressed="${transitionMode === 'fade'}" class="${transitionMode === 'fade' ? 'selected' : ''}">Fade through black</button></div>
       <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="import-srt" type="button">Import SRT</button><input id="srt-input" type="file" accept=".srt,application/x-subrip,text/plain" hidden /><button class="secondary-button" id="export-srt" type="button" disabled>Export SRT</button><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-source-language" type="hidden" value="${escapeHtml(savedProject?.captionSourceLanguage || 'en')}" /><div class="caption-language-heading">Translate from</div><div class="caption-language-options" role="group" aria-label="Subtitle source language"><button type="button" class="selected" data-caption-source="en" aria-pressed="true">English</button><button type="button" data-caption-source="es" aria-pressed="false">Español</button><button type="button" data-caption-source="fr" aria-pressed="false">Français</button><button type="button" data-caption-source="ja" aria-pressed="false">日本語</button><button type="button" data-caption-source="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-source="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-source="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-source="zh" aria-pressed="false">中文</button><button type="button" data-caption-source="ko" aria-pressed="false">한국어</button><button type="button" data-caption-source="ar" aria-pressed="false">العربية</button></div><input id="caption-language" type="hidden" value="${escapeHtml(savedProject?.captionTargetLanguage || 'es')}" /><div class="caption-language-heading">Translate to</div><div class="caption-language-options" role="group" aria-label="Subtitle target language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div class="caption-translation-modes" role="group" aria-label="Subtitle translation method"><button type="button" class="selected" data-caption-mode="smart" aria-pressed="true">Smart · local first</button><button type="button" data-caption-mode="online" aria-pressed="false">DeepL online</button></div><label class="caption-cloud-consent"><input type="checkbox" id="caption-cloud-consent" /><span>DeepL Developer includes 1 million free characters total, not monthly; other plans may be paid. Subtitle text is sent only when you allow DeepL and start translation.</span></label><div id="subtitle-cues" class="subtitle-cues"></div>
-      <div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">${projectId ? `Reopening ${escapeHtml(projectName)}…` : 'Add clips and save this timeline as a local project.'}</div></aside></div>
+       <div class="caption-style-label">CAPTION STYLE</div><div class="caption-style-options" role="group" aria-label="Subtitle appearance"><button type="button" data-caption-style="classic" aria-pressed="${captionStyle === 'classic'}" class="${captionStyle === 'classic' ? 'selected' : ''}">Classic</button><button type="button" data-caption-style="glass" aria-pressed="${captionStyle === 'glass'}" class="${captionStyle === 'glass' ? 'selected' : ''}">Glass</button><button type="button" data-caption-style="outline" aria-pressed="${captionStyle === 'outline'}" class="${captionStyle === 'outline' ? 'selected' : ''}">Outline</button></div><div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">${projectId ? `Reopening ${escapeHtml(projectName)}…` : 'Add clips and save this timeline as a local project.'}</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
       <div class="video-timeline"><span>◷</span><div class="timeline-rail"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
@@ -187,6 +187,11 @@
       transitionMode = button.dataset.transitionMode;
       workspace.querySelectorAll('[data-transition-mode]').forEach(option => { const selected = option === button; option.classList.toggle('selected', selected); option.setAttribute('aria-pressed', String(selected)); });
       invalidateExports();
+    }));
+    workspace.querySelectorAll('[data-caption-style]').forEach(button => button.addEventListener('click', () => {
+      captionStyle = window.TransformoVideoCaptionStyle.getVideoCaptionStyle(button.dataset.captionStyle).id;
+      workspace.querySelectorAll('[data-caption-style]').forEach(option => { const selected = option === button; option.classList.toggle('selected', selected); option.setAttribute('aria-pressed', String(selected)); });
+      updateSubtitlePreview(); invalidateExports();
     }));
     workspace.querySelector('#add-subtitle').addEventListener('click', addSubtitle);
     workspace.querySelector('#subtitle-cues').addEventListener('input', updateSubtitle);
@@ -306,7 +311,7 @@
     if (!window.MediaRecorder || !canvas.captureStream) { notify('Video export is not supported in this browser. Try a recent Chrome or Edge.'); return; }
     let exportFormat = window.TransformoVideoExportFormat.selectVideoExportFormat(type => MediaRecorder.isTypeSupported(type));
     if (!exportFormat) { notify('This browser does not report support for MP4 or WebM recording.'); return; }
-    const exportClips = clips.map(clip => ({ ...clip })), exportTransitionMode = transitionMode;
+    const exportClips = clips.map(clip => ({ ...clip })), exportTransitionMode = transitionMode, exportCaptionStyle = captionStyle;
     if (exportClips.some(clip => clip.end <= clip.start)) { notify('Each clip needs an out point after its in point.'); return; }
     const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), subtitleLink = workspace.querySelector('#download-subtitles');
     if (subtitles.some(cue => cue.end <= cue.start)) { notify('Each subtitle cue needs an end time after its start time.'); return; }
@@ -335,7 +340,20 @@
         if (video.readyState >= 2 && video.videoWidth) { const scale = Math.min(w / video.videoWidth, h / video.videoHeight), dw = video.videoWidth * scale, dh = video.videoHeight * scale; context.drawImage(video, (w - dw) / 2, (h - dh) / 2, dw, dh); }
         if (transitionAlpha > 0) { context.globalAlpha = transitionAlpha; context.fillStyle = '#000'; context.fillRect(0, 0, w, h); context.globalAlpha = 1; }
         const caption = subtitleAt(timelinePosition);
-        if (caption) { context.font = '600 37px Arial, sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; const rows = wrapText(context, caption, w * .8), lineHeight = 47, blockHeight = rows.length * lineHeight; context.fillStyle = 'rgba(12,13,18,.68)'; context.fillRect(w * .08, h - blockHeight - 76, w * .84, blockHeight + 34); context.fillStyle = '#fff'; rows.forEach((line, index) => context.fillText(line, w / 2, h - 58 - blockHeight / 2 + index * lineHeight, w * .8)); }
+        if (caption) {
+          const style = window.TransformoVideoCaptionStyle.getVideoCaptionStyle(exportCaptionStyle);
+          context.font = '600 37px Arial, sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle';
+          const rows = wrapText(context, caption, w * .8), lineHeight = 47, blockHeight = rows.length * lineHeight;
+          if (style.background) { context.fillStyle = style.background; context.fillRect(w * .08, h - blockHeight - 76, w * .84, blockHeight + 34); }
+          context.shadowColor = style.shadow; context.shadowBlur = 8; context.shadowOffsetY = 2;
+          context.fillStyle = style.color;
+          rows.forEach((line, index) => {
+            const y = h - 58 - blockHeight / 2 + index * lineHeight;
+            if (style.outline) { context.strokeStyle = style.outline; context.lineWidth = 5; context.lineJoin = 'round'; context.strokeText(line, w / 2, y, w * .8); }
+            context.fillText(line, w / 2, y, w * .8);
+          });
+          context.shadowColor = 'transparent'; context.shadowBlur = 0; context.shadowOffsetY = 0;
+        }
       };
       recorder.start(250); status.textContent = `Rendering ${exportClips.length} clip${exportClips.length === 1 ? '' : 's'} in timeline order…`;
       let timelineCursor = 0;
@@ -370,7 +388,7 @@
     projectName = input?.value.trim() || 'Untitled video edit';
     if (button) { button.disabled = true; button.textContent = 'Saving…'; }
     try {
-      const record = await WorkspaceStore.saveVideoProject({ id: projectId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: projectName, clips: references, subtitles: subtitles.map(cue => ({ start: cue.start, end: cue.end, text: cue.text })), captionSourceLanguage: workspace.querySelector('#caption-source-language').value, captionTargetLanguage: workspace.querySelector('#caption-language').value, transitionMode });
+      const record = await WorkspaceStore.saveVideoProject({ id: projectId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: projectName, clips: references, subtitles: subtitles.map(cue => ({ start: cue.start, end: cue.end, text: cue.text })), captionSourceLanguage: workspace.querySelector('#caption-source-language').value, captionTargetLanguage: workspace.querySelector('#caption-language').value, transitionMode, captionStyle });
       projectId = record.id; projectName = record.name; projectDirty = false; restoringProject = false;
       if (input) input.value = projectName;
       if (status) status.textContent = `Saved locally · ${new Date(record.updatedAt).toLocaleTimeString()}`;
