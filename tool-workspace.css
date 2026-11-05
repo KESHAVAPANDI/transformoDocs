@@ -101,6 +101,11 @@
 .docx-preview-host{max-height:76vh;min-height:220px;overflow:auto;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(13,14,20,.48);scrollbar-color:#484754 transparent}
 .docx-preview-host .docx-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:16px!important;margin:0 auto!important;padding:0!important;background:transparent!important}
 .docx-preview-host section.docx{flex:none;margin:0 auto!important;box-shadow:0 14px 40px rgba(0,0,0,.32),0 0 0 1px rgba(255,255,255,.1)}
+.docx-preview-host section.docx.docx-translation-page{position:relative!important}
+.docx-translation-layer{position:absolute;z-index:20;inset:0;pointer-events:none}
+.docx-translation-masked,.docx-translation-masked *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;text-decoration-color:transparent!important}
+.docx-translation-block{position:absolute;box-sizing:border-box;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:0;color:#171717;text-shadow:none}
+.docx-translation-tabs{flex:none}
 @media(max-width:700px){.docx-preview-host{max-height:70vh;padding:8px}.docx-preview-host .docx-wrapper{align-items:flex-start!important}}
 
 
@@ -163,3 +168,15 @@
 @media(max-width:700px){.organize-page-grid,.split-page-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.organize-page-card,.split-page-card{padding:6px}.organize-remove{opacity:1;transform:none}.tool-page-content{padding:14px}}
 @media(prefers-reduced-motion:reduce){.organize-page-card{animation:none}}
 @media(max-width:700px){.tool-page-toolbar{margin-bottom:15px}.tool-page-heading{align-items:flex-start;flex-direction:column;gap:13px}.tool-page-heading h1{font-size:26px}.tool-page-action{width:100%}.tool-page-content{padding:14px;border-radius:14px}.tool-page-footer{font-size:8px}.document-preview-heading{align-items:flex-start;flex-direction:column}.document-page-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.edit-document-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.edit-document-page{padding:6px}.workspace-file-picker{grid-template-columns:1fr}.workspace-file-picker label{grid-column:1}.workspace-file-picker .secondary-button{width:100%}.language-pair{gap:5px}}
+
+.file-drop-overlay{position:fixed;z-index:1000;inset:12px;display:grid;place-items:center;overflow:hidden;border:1px dashed rgba(196,181,255,.58);border-radius:24px;background:rgba(13,15,21,.52);backdrop-filter:blur(9px) saturate(125%);-webkit-backdrop-filter:blur(9px) saturate(125%);pointer-events:none;animation:drop-overlay-in .2s ease-out both}
+.file-drop-overlay[hidden]{display:none!important}
+.file-drop-overlay:before{position:absolute;inset:0;content:"";background:radial-gradient(ellipse at 50% 46%,rgba(160,140,239,.13),transparent 46%),linear-gradient(135deg,rgba(154,226,199,.035),transparent 44%,rgba(173,155,246,.055));pointer-events:none}
+.file-drop-card{position:relative;display:flex;min-width:min(340px,calc(100vw - 56px));max-width:min(460px,calc(100vw - 56px));flex-direction:column;align-items:center;gap:10px;padding:28px 34px 30px;border:1px solid rgba(208,197,255,.23);border-radius:22px;background:linear-gradient(145deg,rgba(42,40,58,.94),rgba(27,29,38,.94));box-shadow:0 24px 75px rgba(0,0,0,.44),inset 0 1px rgba(255,255,255,.12);text-align:center;animation:drop-card-in .28s cubic-bezier(.2,.8,.2,1) both}
+.file-drop-icon{display:grid;place-items:center;width:54px;height:54px;border:1px solid rgba(206,194,255,.24);border-radius:17px;background:linear-gradient(145deg,rgba(179,162,255,.24),rgba(111,201,173,.11));box-shadow:0 0 34px rgba(169,148,250,.15);color:#d7ceff;font-size:30px;font-weight:300;line-height:1}
+.file-drop-card strong{color:#f7f5ff;font:700 22px/1.2 var(--display);letter-spacing:-.55px}
+.file-drop-card>span:last-child{color:#b6b4c2;font-size:12px;line-height:1.55}
+@keyframes drop-overlay-in{from{opacity:0}to{opacity:1}}
+@keyframes drop-card-in{from{opacity:0;transform:translateY(9px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:600px){.file-drop-overlay{inset:7px;border-radius:18px}.file-drop-card{min-width:0;width:min(340px,calc(100vw - 52px));padding:24px 20px 25px}.file-drop-card strong{font-size:19px}}
+@media(prefers-reduced-motion:reduce){.file-drop-overlay,.file-drop-card{animation:none}}

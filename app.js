@@ -1,6 +1,6 @@
 const iconTypes={pdf:'pdf',docx:'docx',doc:'docx',xlsx:'xlsx',xls:'xlsx',pptx:'pptx',ppt:'pptx',mp4:'mp4',mov:'mp4',webm:'mp4'};
 let files=[];
-let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false;
+let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false, docxTranslationHost=null, docxTranslationReady=false, docxTranslationToken=0;
 const translationLanguages=[['en','English'],['ja','日本語'],['es','Español'],['fr','Français'],['hi','हिन्दी'],['ta','தமிழ்'],['de','Deutsch'],['zh','中文'],['pt','Português'],['ko','한국어'],['ar','العربية'],['it','Italiano'],['ru','Русский'],['nl','Nederlands'],['bn','বাংলা'],['bg','Български'],['cs','Čeština'],['da','Dansk'],['el','Ελληνικά'],['fi','Suomi'],['he','עברית'],['hr','Hrvatski'],['hu','Magyar'],['id','Bahasa Indonesia'],['kn','ಕನ್ನಡ'],['lt','Lietuvių'],['mr','मराठी'],['no','Norsk'],['pl','Polski'],['ro','Română'],['sk','Slovenčina'],['sl','Slovenščina'],['sv','Svenska'],['te','తెలుగు'],['th','ไทย'],['tr','Türkçe'],['uk','Українська'],['vi','Tiếng Việt'],['zh-Hant','繁體中文']];
 const ocrLanguages=[['eng','English'],['jpn','日本語'],['spa','Español'],['fra','Français'],['hin','हिन्दी'],['tam','தமிழ்'],['deu','Deutsch'],['chi_sim','简体中文'],['por','Português'],['kor','한국어'],['ara','العربية'],['ita','Italiano'],['rus','Русский'],['nld','Nederlands'],['ben','বাংলা'],['bul','Български'],['ces','Čeština'],['dan','Dansk'],['ell','Ελληνικά'],['fin','Suomi'],['heb','עברית'],['hrv','Hrvatski'],['hun','Magyar'],['ind','Bahasa Indonesia'],['kan','ಕನ್ನಡ'],['mar','मराठी'],['nor','Norsk'],['pol','Polski'],['ron','Română'],['slk','Slovenčina'],['slv','Slovenščina'],['swe','Svenska'],['tel','తెలుగు'],['tha','ไทย'],['tur','Türkçe'],['ukr','Українська'],['vie','Tiếng Việt'],['chi_tra','繁體中文']];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -9,21 +9,30 @@ function languagePicker(fieldId,label,selected){return `<div class="language-opt
 function ocrLanguagePicker(){return `<div class="language-option-grid ocr-language-options" role="group" aria-label="OCR language">${ocrLanguages.map(([code,name],index)=>`<button type="button" class="language-option ${index===0?'selected':''}" data-language-target="ocr-language" data-language-value="${code}" aria-pressed="${index===0}">${name}</button>`).join('')}<button type="button" class="language-more" data-language-more aria-expanded="false">More languages</button></div>`}
 function conversionType(files=selectedTaskFiles){if(!files.length)return'';const types=files.map(file=>{const ext=(file.name.split('.').pop()||'').toLowerCase();return ext==='pdf'?'pdf':ext==='txt'?'text':ext==='docx'?'docx':ext==='pptx'?'pptx':ext==='xlsx'?'xlsx':file.type.startsWith('image/')||/^(png|jpe?g|webp|gif|bmp)$/.test(ext)?'image':'other'});return types.every(type=>type===types[0])?types[0]:'mixed'}
 function updateConversionChoices(){const root=$('#conversion-options'),help=$('#conversion-help');if(!root)return;const type=conversionType(),choices=type==='pdf'?[['pdf-images','PDF → PNG images','Export every page into a ZIP.'],['pdf-jpg','PDF → JPG images','Export smaller, shareable page images.'],['pdf-text','PDF → text','Extract readable text into a .txt file.']]:type==='docx'?[['docx-pdf','DOCX → PDF','Preview each page; export a visual PDF.'],['docx-text','DOCX → text','Keep paragraphs, list markers, and table columns.']]:type==='pptx'?[['pptx-text','PPTX → text','Extract slide text in presentation order.']]:type==='xlsx'?[['xlsx-csv','XLSX → CSV','Export worksheet values as spreadsheet text.']]:type==='image'?[['images-pdf','Images → PDF','Combine selected images into one PDF.']]:type==='text'?[['text-pdf','Text → PDF','Create a paginated PDF from text files.']]:[];if(type&&!choices.some(([id])=>id===selectedConversion))selectedConversion='';root.innerHTML=choices.length?choices.map(([id,title,detail])=>`<button type="button" class="conversion-option-card ${selectedConversion===id?'selected':''}" data-conversion-option="${id}" aria-pressed="${selectedConversion===id}"><span class="conversion-option-icon">${id==='docx-pdf'?'W':id==='pdf-text'||id==='docx-text'||id==='pptx-text'?'T':id==='pdf-images'?'▧':id==='pdf-jpg'?'◉':id==='images-pdf'?'▤':'¶'}</span><span><strong>${title}</strong><small>${detail}</small></span><span class="conversion-option-check">✓</span></button>`).join(''):'<div class="conversion-empty">Choose files of one type to see available conversions.</div>';if(help)help.textContent=type==='mixed'?'Choose one file type in a batch.':type==='other'?'This file type does not have a conversion available yet.':type==='docx'?selectedConversion==='docx-pdf'?(selectedTaskFiles.length!==1?'Choose one Word file for a page preview.':'Previewing Word pages before export.'):'Word to PDF keeps a visual page layout; text extraction is also available.':type==='pptx'?'Text only: slide layout, images, and styling are not included.':type==='xlsx'?'Values only: cell styling, formulas, and workbook formatting are not included.':'Choose an output card to continue.'}
-function updateTaskCta(){const button=$('#tool-cta');if(!button)return;if(pendingTask==='Split'){const range=$('#page-range')?.value.trim(),count=selectedSplitPages.size;button.innerHTML=range?'Extract page range <span>↗</span>':count?`Extract ${count} page${count===1?'':'s'} <span>↗</span>`:'Extract pages <span>↗</span>';button.disabled=!selectedTaskFiles.length||(!range&&!count);return}if(pendingTask==='Convert'){updateConversionChoices();const labels={'pdf-images':'Export PNG pages','pdf-jpg':'Export JPG pages','pdf-text':'Extract PDF text','docx-pdf':'Create visual PDF','docx-text':'Download Word text','pptx-text':'Download slide text','xlsx-csv':'Export CSV files','images-pdf':'Create PDF from images','text-pdf':'Create PDF from text'};button.innerHTML=`${labels[selectedConversion]||'Choose a conversion'} <span>↗</span>`;button.disabled=!selectedTaskFiles.length||conversionType()==='mixed'||conversionType()==='other'||!selectedConversion||(selectedConversion==='docx-pdf'&&(selectedTaskFiles.length!==1||!docxPreviewReady));return}if(pendingTask==='Compress'){button.innerHTML='Compress PDF <span>↗</span>';button.disabled=!selectedTaskFiles.length||!selectedCompression;return}if(pendingTask==='Translate'){const source=$('#source-language')?.value,target=$('#target-language')?.value,same=source&&source===target;button.innerHTML=same?'Choose different languages <span>↗</span>':translatedDocument?'Download translated PDF <span>↗</span>':'Translate document <span>↗</span>';button.disabled=same||(!selectedTaskFiles.length&&!translatedDocument);return}if(pendingTask==='Merge'){button.innerHTML=selectedTaskFiles.length>=2?`Merge ${selectedTaskFiles.length} PDFs <span>↗</span>`:'Choose at least 2 PDFs <span>↗</span>';button.disabled=selectedTaskFiles.length<2;return}if(pendingTask==='Watermark'){button.disabled=!selectedTaskFiles.length||!$('#watermark-text')?.value.trim();return}button.disabled=!selectedTaskFiles.length}
+function updateTaskCta(){
+  const button=$('#tool-cta');if(!button)return;
+  if(pendingTask==='Split'){const range=$('#page-range')?.value.trim(),count=selectedSplitPages.size;button.innerHTML=range?'Extract page range <span>↗</span>':count?`Extract ${count} page${count===1?'':'s'} <span>↗</span>`:'Extract pages <span>↗</span>';button.disabled=!selectedTaskFiles.length||(!range&&!count);return}
+  if(pendingTask==='Convert'){updateConversionChoices();const labels={'pdf-images':'Export PNG pages','pdf-jpg':'Export JPG pages','pdf-text':'Extract PDF text','docx-pdf':'Create visual PDF','docx-text':'Download Word text','pptx-text':'Download slide text','xlsx-csv':'Export CSV files','images-pdf':'Create PDF from images','text-pdf':'Create PDF from text'};button.innerHTML=`${labels[selectedConversion]||'Choose a conversion'} <span>↗</span>`;button.disabled=!selectedTaskFiles.length||conversionType()==='mixed'||conversionType()==='other'||!selectedConversion||(selectedConversion==='docx-pdf'&&(selectedTaskFiles.length!==1||!docxPreviewReady));return}
+  if(pendingTask==='Compress'){button.innerHTML='Compress PDF <span>↗</span>';button.disabled=!selectedTaskFiles.length||!selectedCompression;return}
+  if(pendingTask==='Translate'){const source=$('#source-language')?.value,target=$('#target-language')?.value,same=source&&source===target,isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx');button.innerHTML=same?'Choose different languages <span>↗</span>':translatedDocument?'Download translated PDF <span>↗</span>':'Translate document <span>↗</span>';button.disabled=same||(!selectedTaskFiles.length&&!translatedDocument)||(isDocx&&!docxTranslationReady);return}
+  if(pendingTask==='Merge'){button.innerHTML=selectedTaskFiles.length>=2?`Merge ${selectedTaskFiles.length} PDFs <span>↗</span>`:'Choose at least 2 PDFs <span>↗</span>';button.disabled=selectedTaskFiles.length<2;return}
+  if(pendingTask==='Watermark'){button.disabled=!selectedTaskFiles.length||!$('#watermark-text')?.value.trim();return}
+  button.disabled=!selectedTaskFiles.length;
+}
 function renderFiles(){const list=$('#file-list'),shown=files.filter(f=>activeFilter==='all'||f.kind===activeFilter);$('#empty-state').hidden=shown.length>0;list.innerHTML=shown.map((f,i)=>`<div class="file-row" style="animation-delay:${i*45}ms"><div class="file-name"><span class="file-type-icon ${f.tone}">${esc(f.ext)}</span><span class="file-title-wrap">${f.id?`<button class="file-title file-open" data-open-file-id="${esc(f.id)}">${esc(f.name)}</button>`:`<div class="file-title">${esc(f.name)}</div>`}<div class="file-meta">${f.kind==='video'?'Video':'Saved on this device'}</div></span></div><span class="file-date">${esc(f.date)}</span><span class="file-size">${esc(f.size)}</span><button class="row-menu" aria-label="File actions" data-file-id="${esc(f.id||'')}" data-file="${esc(f.name)}">···</button></div>`).join('');renderVideoProjects();}
 function renderVideoProjects(){const root=$('#video-projects');if(!root)return;const clips=files.filter(file=>file.kind==='video');root.innerHTML=clips.length?clips.map((file,index)=>`<article class="video-project-card"><div class="project-thumb ${index%3===1?'thumb-two':index%3===2?'thumb-three':''}"><button class="project-play" type="button" data-open-video-index="${index}" aria-label="Open ${esc(file.name)}">▶</button></div><div class="project-meta"><span class="project-name">${esc(file.name)}</span><span class="project-duration">${esc(file.size)}</span></div><div class="project-updated">Saved on this device</div></article>`).join(''):'<div class="video-empty-state"><span>▷</span><strong>Your video space is ready.</strong><small>Add a clip to start an edit. It will stay on this device.</small></div>';}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2600)}
 function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===(view==='tool'?'documents':view)));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='tool'?$('#tool-title').textContent:'Documents';window.scrollTo({top:0,behavior:'smooth'});}
 function openTask(task,conversionPreset=''){
-  docxPreviewToken++;docxPreviewReady=false;
+  docxPreviewToken++;docxPreviewReady=false;docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null;
   previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;organizeOrder=[];organizePreviewPages=[];selectedSplitPages=new Set();splitPreviewPages=[];workspaceSelectionIds=new Set();selectedConversion='';selectedCompression='balanced';
   if($('.page-view.visible')?.id!=='tool-view')previousView=$('.page-view.visible')?.id.replace('-view','')||'documents';
   pendingTask=task;selectedConversion=conversionPreset;taskPages=[];selectedTaskFiles=[];
-  const configs={Translate:['Translate a document','Translate the full document and review the translated pages before export.'],Edit:['Edit document text','Change text directly over the page while keeping its original position.'],Organize:['Organize PDF pages','Reorder, rotate, and remove pages while keeping the document in view.'],Convert:['Convert files','Choose a card for PDF, Office, image, or text conversions.'],Merge:['Merge PDFs','Arrange your files, then combine them in that order.'],Split:['Split a PDF','Extract selected pages into a new PDF.'],Compress:['Compress a PDF','Reduce image weight with a selectable quality preset.'],Watermark:['Add a PDF watermark','Stamp a light, centered watermark across every page.'],Number:['Add page numbers','Add a clean page number to the bottom of every page.']};
+  const configs={Translate:['Translate a document','Translate a PDF or Word document while keeping text anchored to its page.'],Edit:['Edit document text','Change text directly over the page while keeping its original position.'],Organize:['Organize PDF pages','Reorder, rotate, and remove pages while keeping the document in view.'],Convert:['Convert files','Choose a card for PDF, Office, image, or text conversions.'],Merge:['Merge PDFs','Arrange your files, then combine them in that order.'],Split:['Split a PDF','Extract selected pages into a new PDF.'],Compress:['Compress a PDF','Reduce image weight with a selectable quality preset.'],Watermark:['Add a PDF watermark','Stamp a light, centered watermark across every page.'],Number:['Add page numbers','Add a clean page number to the bottom of every page.']};
   const [title,desc]=configs[task]||configs.Translate; $('#tool-title').textContent=title; $('#tool-description').textContent=desc;
-  const accepts=['Translate','Edit','Organize','Merge','Split','Compress','Watermark','Number'].includes(task)?'application/pdf,.pdf':'.pdf,.docx,.pptx,.xlsx,.txt,image/*';
+  const accepts=task==='Translate'?'application/pdf,.pdf,.docx':['Edit','Organize','Merge','Split','Compress','Watermark','Number'].includes(task)?'application/pdf,.pdf':'.pdf,.docx,.pptx,.xlsx,.txt,image/*';
   const multiple=task==='Merge'||task==='Convert'?'multiple':'';
-  let fields=`<div class="tool-field"><label for="task-files">${task==='Merge'?'Choose two or more PDFs':task==='Convert'?'Choose PDF, DOCX, PPTX, XLSX, text, or image files':'Choose a PDF file'}</label><input id="task-files" type="file" accept="${accepts}" ${multiple} /><span class="field-help">Files stay on this device. Nothing is uploaded.</span></div><div class="workspace-file-picker" id="workspace-file-picker" hidden><label>Or choose from this workspace</label><div class="workspace-file-options" id="workspace-file-options"></div><div class="workspace-picker-footer"><span id="workspace-selection-count">0 selected</span><button class="secondary-button" id="load-workspace-files" type="button" disabled>Use selected files</button></div></div>`;
+  let fields=`<div class="tool-field"><label for="task-files">${task==='Merge'?'Choose two or more PDFs':task==='Convert'?'Choose PDF, DOCX, PPTX, XLSX, text, or image files':task==='Translate'?'Choose a PDF or Word DOCX file':'Choose a PDF file'}</label><input id="task-files" type="file" accept="${accepts}" ${multiple} /><span class="field-help">Files stay on this device. Nothing is uploaded.</span></div><div class="workspace-file-picker" id="workspace-file-picker" hidden><label>Or choose from this workspace</label><div class="workspace-file-options" id="workspace-file-options"></div><div class="workspace-picker-footer"><span id="workspace-selection-count">0 selected</span><button class="secondary-button" id="load-workspace-files" type="button" disabled>Use selected files</button></div></div>`;
   if(task==='Split') fields+=`<div class="tool-field"><label for="page-range">Or enter page numbers</label><input id="page-range" placeholder="e.g. 1–4, 7, 10–12" /><span class="field-help">Page numbers start at 1. You can also select pages from the preview below.</span></div>`;
   if(task==='Organize') fields+=`<div class="position-note">✧ <span>Move pages with the arrows, rotate a page in 90° steps, or remove pages. The source file is never changed.</span></div>`;
   if(task==='Compress') fields+=`<div class="conversion-choice-field"><div class="conversion-choice-label">Choose image quality</div><div class="compression-options" role="group" aria-label="Compression quality"><button type="button" class="conversion-option-card ${selectedCompression==='compact'?'selected':''}" data-compression-option="compact" aria-pressed="${selectedCompression==='compact'}"><span class="conversion-option-icon">↓</span><span><strong>Compact</strong><small>Smaller files · 86 dpi · JPEG quality 62</small></span><span class="conversion-option-check">✓</span></button><button type="button" class="conversion-option-card ${selectedCompression==='balanced'?'selected':''}" data-compression-option="balanced" aria-pressed="${selectedCompression==='balanced'}"><span class="conversion-option-icon">◈</span><span><strong>Balanced</strong><small>Everyday use · 119 dpi · JPEG quality 78</small></span><span class="conversion-option-check">✓</span></button><button type="button" class="conversion-option-card ${selectedCompression==='quality'?'selected':''}" data-compression-option="quality" aria-pressed="${selectedCompression==='quality'}"><span class="conversion-option-icon">✧</span><span><strong>Higher quality</strong><small>Sharper pages · 180 dpi · may not reduce size</small></span><span class="conversion-option-check">✓</span></button></div><div class="position-note position-note-warning">Compression redraws each page as a JPEG image. The layout stays visible, but text, links, and forms won’t remain searchable or editable.</div><span id="compression-progress" class="field-help"></span></div>`;
@@ -48,6 +57,7 @@ function openTask(task,conversionPreset=''){
 async function loadTaskFiles(event){
   discardTranslationResult();
   selectedTaskFiles=[...event.target.files];
+  if(pendingTask==='Translate'){docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null}
   updateTaskCta();
   syncDocxConversionPreview();
   await addFiles(selectedTaskFiles);
@@ -57,8 +67,8 @@ async function loadTaskFiles(event){
 async function populateWorkspacePicker(task){
   const picker=$('#workspace-file-picker'),root=$('#workspace-file-options');if(!picker||!root)return;
   try{
-    const records=await WorkspaceStore.list(),isPdfOnly=['Edit','Translate','Organize','Split','Merge','Compress','Watermark','Number'].includes(task);
-    const eligible=records.filter(record=>{const name=record.name.toLowerCase(),isPdf=name.endsWith('.pdf'),isVideo=record.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/.test(name);return isPdfOnly?isPdf:task==='Convert'?!isVideo:true});
+    const records=await WorkspaceStore.list(),isPdfOnly=['Edit','Organize','Split','Merge','Compress','Watermark','Number'].includes(task);
+    const eligible=records.filter(record=>{const name=record.name.toLowerCase(),isPdf=name.endsWith('.pdf'),isWord=name.endsWith('.docx'),isVideo=record.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/.test(name);return isPdfOnly?isPdf:task==='Translate'?isPdf||isWord:task==='Convert'?!isVideo:true});
     root.innerHTML=eligible.map(record=>`<button type="button" class="workspace-file-option" data-workspace-file-id="${esc(record.id)}" aria-pressed="false"><span class="workspace-option-icon ${iconTypes[(record.name.split('.').pop()||'').toLowerCase()]||'docx'}">${esc((record.name.split('.').pop()||'FILE').toUpperCase().slice(0,4))}</span><span class="workspace-option-copy"><strong>${esc(record.name)}</strong><small>${record.size>1048576?`${(record.size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(record.size/1024))} KB`}</small></span><span class="workspace-option-check">✓</span></button>`).join('');
     picker.hidden=!eligible.length;
   }catch{picker.hidden=true}
@@ -66,7 +76,30 @@ async function populateWorkspacePicker(task){
 async function loadWorkspaceSelection(){
   const ids=[...workspaceSelectionIds];
   if(!ids.length){toast('Choose a saved file first.');return}
-  try{discardTranslationResult();const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);updateTaskCta();syncDocxConversionPreview();await analyzeTaskFiles();updateTaskCta();toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
+  try{discardTranslationResult();const records=await Promise.all(ids.map(id=>WorkspaceStore.get(id)));selectedTaskFiles=records.filter(Boolean).map(record=>record.file);if(pendingTask==='Translate'){docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null}updateTaskCta();syncDocxConversionPreview();await analyzeTaskFiles();updateTaskCta();toast(`${selectedTaskFiles.length} saved file${selectedTaskFiles.length===1?'':'s'} loaded.`)}catch(error){toast(error.message)}
+}
+async function renderDocxTranslationWorkspace(file){
+  const root=$('#line-editor');if(!root)return;
+  const token=++docxTranslationToken;docxTranslationReady=false;docxTranslationHost=null;root.hidden=false;
+  root.innerHTML='<div class="document-preview-heading"><div><strong>Word page translation</strong><span>Preparing the rendered pages…</span></div></div><div class="position-note">Paragraphs translate in their original page boxes. Longer translations may need review. Page rendering is a browser approximation.</div><div class="document-preview-loading"><span class="preview-spinner"></span><span>Rendering Word pages…</span></div><div class="docx-preview-host" aria-label="Word document page preview"></div>';
+  const host=root.querySelector('.docx-preview-host');
+  try{
+    const pageCount=await DocumentEngine.renderDocxPreview(file,host);
+    if(token!==docxTranslationToken||pendingTask!=='Translate')return;
+    root.querySelector('.document-preview-loading')?.remove();
+    docxTranslationHost=host;docxTranslationReady=true;
+    root.querySelector('.document-preview-heading span').textContent=`${pageCount} page${pageCount===1?'':'s'} · review before translating`;
+    const note=root.querySelector('.position-note');
+    note.textContent='Translate text in its original page position. Compare the original and translated pages before downloading the image-backed PDF.';
+    const tabs=document.createElement('div');tabs.className='docx-translation-tabs document-preview-tabs';tabs.innerHTML='<button type="button" class="document-preview-tab active" data-docx-preview="original">Original</button><button type="button" class="document-preview-tab" data-docx-preview="translated" disabled>Translated</button>';
+    root.querySelector('.document-preview-heading').append(tabs);
+    tabs.addEventListener('click',event=>{const button=event.target.closest('[data-docx-preview]');if(!button||button.disabled)return;DocumentEngine.setDocxTranslationMode(host,button.dataset.docxPreview);tabs.querySelectorAll('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab===button))});
+    updateTaskCta();
+  }catch(error){
+    if(token!==docxTranslationToken)return;
+    root.innerHTML=`<div class="position-note position-note-warning">${esc(error.message||'The Word page preview could not be prepared.')}</div>`;
+    updateTaskCta();throw error;
+  }
 }
 function syncDocxConversionPreview(){
   const root=$('#docx-conversion-preview');if(!root)return;
@@ -98,7 +131,7 @@ function syncDocxConversionPreview(){
 async function analyzeTaskFiles(){
   if(!selectedTaskFiles.length)return;
   if((pendingTask==='Edit'||pendingTask==='Translate')&&selectedTaskFiles.length===1){
-    try{taskPages=await DocumentEngine.inspectPdf(selectedTaskFiles[0]);if(pendingTask==='Translate')await renderTranslationPreview(selectedTaskFiles[0]);else await renderVisualPdfEditor(selectedTaskFiles[0]);toast(`Document ready · ${taskPages.length} page${taskPages.length===1?'':'s'}.`)}catch(error){toast(error.message)}
+    try{if(pendingTask==='Translate'&&selectedTaskFiles[0].name.toLowerCase().endsWith('.docx')){await renderDocxTranslationWorkspace(selectedTaskFiles[0]);toast('Word document ready · translate and review it on the page.')}else{taskPages=await DocumentEngine.inspectPdf(selectedTaskFiles[0]);if(pendingTask==='Translate')await renderTranslationPreview(selectedTaskFiles[0]);else await renderVisualPdfEditor(selectedTaskFiles[0]);toast(`Document ready · ${taskPages.length} page${taskPages.length===1?'':'s'}.`)}}catch(error){toast(error.message)}
   } else if(pendingTask==='Organize'&&selectedTaskFiles.length===1){
     try{await renderOrganizeWorkspace(selectedTaskFiles[0])}catch(error){toast(error.message)}
   } else if(pendingTask==='Split'&&selectedTaskFiles.length===1){
@@ -190,6 +223,8 @@ function discardTranslationResult(){
   if(pendingTask!=='Translate')return;
   translationPreviews.translated?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
   translationPreviews.translated=null;translatedDocument=null;
+  if(docxTranslationHost){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original')}
+  const docxTab=$('[data-docx-preview="translated"]');if(docxTab)docxTab.disabled=true;
   const tab=$('[data-document-preview="translated"]');if(tab)tab.disabled=true;
   if(translationPreviews.source)drawTranslationPreview('source');
   updateTaskCta();
@@ -202,7 +237,23 @@ async function runOcrOnCurrentPdf(){
 }
 function readEditedLines(){let index=0;for(const page of taskPages)for(const line of page.lines){const input=$(`[data-line-index="${index++}"]`);if(input)line.edited=input.value}}
 async function translateCurrentLines(){
-  if(!taskPages.length||!selectedTaskFiles[0]){toast('Choose a PDF first.');return}
+  if(!selectedTaskFiles[0]){toast('Choose a document first.');return}
+  if(selectedTaskFiles[0].name.toLowerCase().endsWith('.docx')){
+    if(!docxTranslationReady||!docxTranslationHost){toast('Wait for the Word page preview to finish.');return}
+    const button=$('#tool-cta');button.disabled=true;
+    try{
+      const source=$('#source-language').value,target=$('#target-language').value;
+      const overflowLines=await DocumentEngine.translateDocxInPlace(docxTranslationHost,source,target,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:`Translating paragraphs · ${done} of ${total}`});
+      button.textContent='Composing translated Word pages…';
+      translatedDocument=await DocumentEngine.exportDocxTranslatedPdf(selectedTaskFiles[0],docxTranslationHost,overflowLines,(done,total)=>{button.textContent=`Creating PDF page ${done} of ${total}…`});
+      const tab=$('[data-docx-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
+      button.innerHTML='Download translated PDF <span>↗</span>';
+      toast(overflowLines?`Translation ready · ${overflowLines} paragraph${overflowLines===1?' may':'s may'} overflow. Review the page preview.`:'Translated Word document ready · review the page preview before downloading.');
+    }catch(error){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');toast(error.message||'The Word document could not be translated.')}
+    finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
+    return;
+  }
+  if(!taskPages.length){toast('Choose a text-based PDF first.');return}
   if(!taskPages.some(page=>page.lines.length)){toast('Run OCR on the scanned pages before translating.');return}
   readEditedLines();const button=$('#tool-cta');button.disabled=true;
   try{
@@ -277,7 +328,28 @@ document.addEventListener('dragenter',showFileDrop,true);document.addEventListen
 function hideFileDrop(){fileDropOverlay.hidden=true}
 document.addEventListener('dragleave',event=>{if(isFileDrag(event)&&(!event.relatedTarget||!document.documentElement.contains(event.relatedTarget)))hideFileDrop()},true);
 document.addEventListener('dragend',hideFileDrop,true);window.addEventListener('blur',()=>hideFileDrop());
-document.addEventListener('drop',async event=>{if(!isFileDrag(event))return;event.preventDefault();fileDropOverlay.hidden=true;const incoming=[...event.dataTransfer.files];if($('#videos-view').classList.contains('visible')||($('#tool-view').classList.contains('visible')&&previousView==='videos')){const clips=incoming.filter(file=>file.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/i.test(file.name));if(!clips.length){toast('Drop one or more video files to start an edit.');return}await addFiles(clips,'video');setView('videos');TransformoVideoEditor.open(clips)}else await addFiles(incoming)},true);
+document.addEventListener('drop',async event=>{
+  if(!isFileDrag(event))return;
+  event.preventDefault();hideFileDrop();
+  const incoming=[...event.dataTransfer.files];
+  if($('#videos-view').classList.contains('visible')||($('#tool-view').classList.contains('visible')&&previousView==='videos')){
+    const clips=incoming.filter(file=>file.type.startsWith('video/')||/\.(mp4|mov|webm|mkv)$/i.test(file.name));
+    if(!clips.length){toast('Drop one or more video files to start an edit.');return}
+    await addFiles(clips,'video');setView('videos');TransformoVideoEditor.open(clips);return;
+  }
+  if($('#tool-view').classList.contains('visible')){
+    const ext=file=>file.name.split('.').pop().toLowerCase();
+    const isPdf=file=>ext(file)==='pdf',isDocx=file=>ext(file)==='docx';
+    const accepts=file=>pendingTask==='Translate'?isPdf(file)||isDocx(file):['Edit','Organize','Split','Merge','Compress','Watermark','Number'].includes(pendingTask)?isPdf(file):pendingTask==='Convert'?['pdf','docx','pptx','xlsx','txt','png','jpg','jpeg','webp','gif','bmp'].includes(ext(file))||file.type.startsWith('image/'):true;
+    let valid=incoming.filter(accepts);
+    if(!valid.length){toast(pendingTask==='Translate'?'Drop a PDF or Word DOCX file here.':'Drop a supported file here.');return}
+    if(['Translate','Edit','Organize','Split','Compress','Watermark','Number'].includes(pendingTask)&&valid.length>1){toast('This tool works with one file at a time. The first supported file was loaded.');valid=valid.slice(0,1)}
+    discardTranslationResult();selectedTaskFiles=valid;
+    if(pendingTask==='Translate'){docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null}
+    updateTaskCta();syncDocxConversionPreview();await addFiles(valid);await analyzeTaskFiles();updateTaskCta();return;
+  }
+  await addFiles(incoming);
+},true);
 $('#tool-back').addEventListener('click',closeTool);$('#tool-cta').addEventListener('click',performCurrentTask);
 $('#tool-content').addEventListener('click',event=>{
   const swap=event.target.closest('[data-language-swap]');

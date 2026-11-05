@@ -247,25 +247,120 @@
     return pages.length;
   }
 
+  function expandDocxPreviewHost(container) {
+    const previous = { maxHeight: container.style.maxHeight, overflow: container.style.overflow, overflowX: container.style.overflowX, overflowY: container.style.overflowY };
+    container.style.maxHeight = 'none'; container.style.overflow = 'visible'; container.style.overflowX = 'visible'; container.style.overflowY = 'visible';
+    return () => Object.assign(container.style, previous);
+  }
+
+  function clearDocxTranslation(container) {
+    if (!container) return;
+    container.querySelectorAll('.docx-translation-layer').forEach(layer => layer.remove());
+    container.querySelectorAll('.docx-translation-masked').forEach(element => element.classList.remove('docx-translation-masked'));
+    container.querySelectorAll('section.docx').forEach(page => { page.classList.remove('docx-translation-page'); delete page.dataset.translationVisible; });
+  }
+
+  function setDocxTranslationMode(container, mode) {
+    if (!container) return;
+    const translated = mode === 'translated';
+    container.querySelectorAll('section.docx').forEach(page => {
+      page.classList.toggle('docx-translation-page', translated);
+      page.querySelectorAll('.docx-translation-masked').forEach(element => element.classList.toggle('docx-translation-masked', translated));
+      const layer = page.querySelector('.docx-translation-layer');
+      if (layer) layer.style.display = translated ? 'block' : 'none';
+    });
+  }
+
+  async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}) {
+    requireLibraries('docx', 'JSZip');
+    if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. Open Transformo in a supported desktop browser to translate Word documents on this device.');
+    const pages = [...(container?.querySelectorAll('section.docx') || [])];
+    if (!pages.length) throw new Error('The Word page preview is unavailable. Choose the file again.');
+    const blocks = [];
+    pages.forEach((page, pageIndex) => {
+      const pageRect = page.getBoundingClientRect();
+      for (const element of page.querySelectorAll('p')) {
+        const text = (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+        const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);
+        if (bounds.width < 2 || bounds.height < 2) continue;
+        const fontSize = Math.max(5, parseFloat(style.fontSize) || 11), lineHeight = Math.max(fontSize, parseFloat(style.lineHeight) || fontSize * 1.2);
+        blocks.push({ page, pageIndex, element, text, x: bounds.left - pageRect.left, y: bounds.top - pageRect.top, width: bounds.width, height: bounds.height, fontSize, lineHeight, fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, textAlign: style.textAlign, textIndent: style.textIndent, direction: style.direction });
+      }
+    });
+    if (!blocks.length) throw new Error('No readable Word paragraphs were found to translate.');
+    const options = { sourceLanguage, targetLanguage }, availability = await Translator.availability(options);
+    if (availability === 'unavailable') throw new Error(`The browser has no translation model for ${sourceLanguage} → ${targetLanguage}.`);
+    const translator = await Translator.create({ ...options, monitor(monitor) { monitor.addEventListener('downloadprogress', event => onProgress(0, blocks.length, { stage: 'download', progress: event.loaded })); } });
+    const translations = [];
+    try {
+      for (const [index, block] of blocks.entries()) {
+        translations.push(await translator.translate(block.text));
+        onProgress(index + 1, blocks.length);
+      }
+    } finally { translator.destroy?.(); }
+    clearDocxTranslation(container);
+    const layers = new Map();
+    pages.forEach(page => {
+      page.classList.add('docx-translation-page');
+      const layer = document.createElement('div'); layer.className = 'docx-translation-layer'; layer.style.display = 'block'; layer.setAttribute('aria-hidden', 'true');
+      page.append(layer); layers.set(page, layer);
+    });
+    const rtl = /^(ar|he)(?:-|$)/i.test(targetLanguage); let overflowBlocks = 0;
+    blocks.forEach((block, index) => {
+      const overlay = document.createElement('div'); overlay.className = 'docx-translation-block'; overlay.textContent = translations[index];
+      Object.assign(overlay.style, { left: `${block.x}px`, top: `${block.y}px`, width: `${block.width}px`, height: `${block.height}px`, fontFamily: block.fontFamily, fontSize: `${block.fontSize}px`, fontWeight: block.fontWeight, fontStyle: block.fontStyle, lineHeight: `${block.lineHeight}px`, textAlign: block.textAlign === 'start' ? (rtl ? 'right' : 'left') : block.textAlign, textIndent: block.textIndent, direction: rtl ? 'rtl' : block.direction, color: '#171717' });
+      layers.get(block.page).append(overlay); block.element.classList.add('docx-translation-masked');
+      let size = block.fontSize, lineHeight = block.lineHeight;
+      while (overlay.scrollHeight > block.height + 1 && size > 5) { size = Math.max(5, size - .5); lineHeight = Math.max(size * 1.05, lineHeight * size / block.fontSize); overlay.style.fontSize = `${size}px`; overlay.style.lineHeight = `${lineHeight}px`; }
+      if (overlay.scrollHeight > block.height + 1) overflowBlocks++;
+    });
+    setDocxTranslationMode(container, 'translated');
+    return overflowBlocks;
+  }
+
+  async function exportDocxTranslatedPdf(file, container, overflowLines = 0, onProgress = () => {}) {
+    requireLibraries('PDFLib', 'html2canvas');
+    if (!container || ![...container.querySelectorAll('section.docx')].length) throw new Error('The Word page preview is unavailable.');
+    setDocxTranslationMode(container, 'translated');
+    const pages = [...container.querySelectorAll('section.docx')], output = await PDFDocument.create(), restoreHost = expandDocxPreviewHost(container);
+    onProgress(0, pages.length);
+    try {
+      for (const [index, page] of pages.entries()) {
+        const bounds = page.getBoundingClientRect(), width = bounds.width || page.offsetWidth, height = bounds.height || page.offsetHeight;
+        if (!(width > 0 && height > 0)) throw new Error(`Word page ${index + 1} has no measurable size.`);
+        const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!imageBlob) throw new Error(`Translated Word page ${index + 1} could not be captured.`);
+        const image = await output.embedPng(await imageBlob.arrayBuffer()), pdfPage = output.addPage([width * .75, height * .75]);
+        pdfPage.drawImage(image, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
+        canvas.width = 1; canvas.height = 1; onProgress(index + 1, pages.length);
+      }
+    } finally { restoreHost(); }
+    return { blob: bytesToBlob(await output.save()), overflowLines, filename: `${safeBase(file.name)}-translated.pdf` };
+  }
+
   async function docxToPdf(file, container, onProgress = () => {}) {
     requireLibraries('PDFLib', 'docx', 'JSZip', 'html2canvas');
     if (!file?.name?.toLowerCase().endsWith('.docx')) throw new Error('Choose a Word .docx file.');
     if (!container || container.__transformoSourceFile !== file) await renderDocxPreview(file, container);
     const pages = [...container.querySelectorAll('section.docx')];
     if (!pages.length) throw new Error('The Word page preview is empty. Choose the file again.');
-    const output = await PDFDocument.create();
+    const output = await PDFDocument.create(), restoreHost = expandDocxPreviewHost(container);
     onProgress(0, pages.length);
-    for (const [index, page] of pages.entries()) {
-      const bounds = page.getBoundingClientRect(), width = bounds.width || page.offsetWidth, height = bounds.height || page.offsetHeight;
-      if (!(width > 0 && height > 0)) throw new Error(`Word page ${index + 1} has no measurable size.`);
-      const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
-      const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .95));
-      if (!imageBlob) throw new Error(`Word page ${index + 1} could not be captured.`);
-      const image = await output.embedJpg(await imageBlob.arrayBuffer()), pdfPage = output.addPage([width * .75, height * .75]);
-      pdfPage.drawImage(image, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
-      canvas.width = 1; canvas.height = 1;
-      onProgress(index + 1, pages.length);
-    }
+    try {
+      for (const [index, page] of pages.entries()) {
+        const bounds = page.getBoundingClientRect(), width = bounds.width || page.offsetWidth, height = bounds.height || page.offsetHeight;
+        if (!(width > 0 && height > 0)) throw new Error(`Word page ${index + 1} has no measurable size.`);
+        const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .95));
+        if (!imageBlob) throw new Error(`Word page ${index + 1} could not be captured.`);
+        const image = await output.embedJpg(await imageBlob.arrayBuffer()), pdfPage = output.addPage([width * .75, height * .75]);
+        pdfPage.drawImage(image, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
+        canvas.width = 1; canvas.height = 1;
+        onProgress(index + 1, pages.length);
+      }
+    } finally { restoreHost(); }
     const blob = bytesToBlob(await output.save());
     download(blob, `${safeBase(file.name)}-visual.pdf`);
     return `Created a visual PDF from ${pages.length} Word page${pages.length === 1 ? '' : 's'}. Page appearance is preserved as images; text is not searchable.`;
@@ -607,5 +702,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
