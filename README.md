@@ -38,7 +38,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 | Workspace | What it is for |
 | --- | --- |
-| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, extract DOCX paragraphs/lists/tables and PPTX slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
+| **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, preview DOCX pages before creating a visual PDF, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages in an expandable set of languages, translate related lines together as positioned text blocks with the browser Translator API when available, swap languages quickly, compare original and translated pages, and download a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. The Edit tool places editable text fields directly over the page at their original positions. |
 | **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, create and translate timed subtitle cues, preview them in place, burn them into a WebM export, and download a separate SRT subtitle file. |
 
@@ -52,7 +52,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 ## 🚀 Getting started
 
-Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, JSZip, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional Translator API can run:
+Transformo is a static web app: no package manager or build step is required. The app loads PDF.js, pdf-lib, JSZip, docx-preview, html2canvas, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional Translator API can run:
 
 ```bash
 git clone https://github.com/KESHAVAPANDI/transformoDocs.git
@@ -65,7 +65,7 @@ Then open `http://localhost:8000` in a recent Chrome or Edge browser. You can al
 python -m http.server 8000
 ```
 
-Internet access is needed to load the PDF libraries. The selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
+Internet access is needed to load the conversion and PDF libraries. The selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
 
 PDF compression is an image-based option for visual fidelity: it redraws each page as a JPEG, so the exported file does not keep searchable text, links, or form fields. Some source PDFs may not shrink; in that case Transformo keeps the original and suggests trying the compact preset.
 
@@ -73,7 +73,7 @@ PDF compression is an image-based option for visual fidelity: it redraws each pa
 
 The next step is to expand format coverage and make the layout-aware workflows more robust. A practical path could look like this:
 
-1. **Add Office formats.** Read and write DOCX, PPTX, and spreadsheets while preserving styles, tables, images, and page geometry.
+1. **Expand Office editing.** Add reversible DOCX editing and improve PPTX and spreadsheet workflows while retaining their native text, styles, and structures.
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
@@ -116,7 +116,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - The translation picker follows Chrome's documented language-code list, while the chosen pair is still checked against the browser's actual model availability. The API is not available in every browser. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/).
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. Subtitle translation uses the browser's built-in Translator API and translates from English. Transitions and MP4 export are not implemented yet.
-- DOCX and PPTX tools extract text only; they do not preserve page/slide layout, images, or styling. XLSX-to-CSV exports values per worksheet; it does not preserve cell formatting, and formula cells use saved values. Office document editing and Office-to-PDF conversion are not implemented yet.
+- DOCX-to-PDF uses a browser-rendered page preview and exports each page as an image to retain its visual layout. It is a best-effort rendering rather than a pixel-perfect Word export, and the PDF text is not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. Office document editing is not implemented yet.
 - Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
 ## 💡 More ideas worth exploring

@@ -96,6 +96,12 @@
 .document-page-card figcaption span:last-child{color:#9cddbf}
 .preview-limit-note{grid-column:1/-1;padding:11px;color:#999aa6;font-size:9px;text-align:center}
 .tool-page-content .line-editor{max-height:none;border:0;background:transparent;padding:0;margin:18px 0 0;overflow:visible}
+.docx-conversion-preview{margin:20px 0 4px}
+.docx-conversion-preview[hidden]{display:none}
+.docx-preview-host{max-height:76vh;min-height:220px;overflow:auto;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(13,14,20,.48);scrollbar-color:#484754 transparent}
+.docx-preview-host .docx-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:16px!important;margin:0 auto!important;padding:0!important;background:transparent!important}
+.docx-preview-host section.docx{flex:none;margin:0 auto!important;box-shadow:0 14px 40px rgba(0,0,0,.32),0 0 0 1px rgba(255,255,255,.1)}
+@media(max-width:700px){.docx-preview-host{max-height:70vh;padding:8px}.docx-preview-host .docx-wrapper{align-items:flex-start!important}}
 
 
 

@@ -225,6 +225,52 @@
     return `Extracted text from ${files.length} Word document${files.length === 1 ? '' : 's'}. Paragraph breaks, list markers, and table columns are preserved.`;
   }
 
+  async function renderDocxPreview(file, container) {
+    requireLibraries('docx', 'JSZip');
+    if (!file?.name?.toLowerCase().endsWith('.docx')) throw new Error('Choose a Word .docx file.');
+    if (!container) throw new Error('The Word preview area is unavailable.');
+    container.replaceChildren();
+    await window.docx.renderAsync(file, container, container, {
+      className: 'docx', breakPages: true, ignoreWidth: false, ignoreHeight: false,
+      renderHeaders: true, renderFooters: true, renderFootnotes: true, renderEndnotes: true
+    });
+    const pages = [...container.querySelectorAll('section.docx')];
+    if (!pages.length) throw new Error('No Word pages were created for the preview.');
+    if (document.fonts?.ready) await document.fonts.ready;
+    await Promise.all([...container.querySelectorAll('img')].map(image => image.complete ? Promise.resolve() : new Promise(resolve => {
+      const done = () => resolve();
+      image.addEventListener('load', done, { once: true });
+      image.addEventListener('error', done, { once: true });
+      setTimeout(done, 12000);
+    })));
+    container.__transformoSourceFile = file;
+    return pages.length;
+  }
+
+  async function docxToPdf(file, container, onProgress = () => {}) {
+    requireLibraries('PDFLib', 'docx', 'JSZip', 'html2canvas');
+    if (!file?.name?.toLowerCase().endsWith('.docx')) throw new Error('Choose a Word .docx file.');
+    if (!container || container.__transformoSourceFile !== file) await renderDocxPreview(file, container);
+    const pages = [...container.querySelectorAll('section.docx')];
+    if (!pages.length) throw new Error('The Word page preview is empty. Choose the file again.');
+    const output = await PDFDocument.create();
+    onProgress(0, pages.length);
+    for (const [index, page] of pages.entries()) {
+      const bounds = page.getBoundingClientRect(), width = bounds.width || page.offsetWidth, height = bounds.height || page.offsetHeight;
+      if (!(width > 0 && height > 0)) throw new Error(`Word page ${index + 1} has no measurable size.`);
+      const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+      const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .95));
+      if (!imageBlob) throw new Error(`Word page ${index + 1} could not be captured.`);
+      const image = await output.embedJpg(await imageBlob.arrayBuffer()), pdfPage = output.addPage([width * .75, height * .75]);
+      pdfPage.drawImage(image, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
+      canvas.width = 1; canvas.height = 1;
+      onProgress(index + 1, pages.length);
+    }
+    const blob = bytesToBlob(await output.save());
+    download(blob, `${safeBase(file.name)}-visual.pdf`);
+    return `Created a visual PDF from ${pages.length} Word page${pages.length === 1 ? '' : 's'}. Page appearance is preserved as images; text is not searchable.`;
+  }
+
   async function pptxToText(input) {
     requireLibraries('JSZip');
     const files = Array.isArray(input) ? input : [input], documents = [], presentationNs = 'http://schemas.openxmlformats.org/presentationml/2006/main', drawingNs = 'http://schemas.openxmlformats.org/drawingml/2006/main', relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -561,5 +607,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();
