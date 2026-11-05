@@ -420,10 +420,10 @@
     return { blob: bytesToBlob(await output.save()), filename: `${safeBase(file.name)}-edited.pdf`, overflowBlocks };
   }
 
-  async function exportDocxEditedDocx(file, container) {
+  async function exportDocxOverlay(file, container, selector, suffix) {
     requireLibraries('JSZip');
-    const overlays = [...(container?.querySelectorAll('.docx-editing-block') || [])];
-    if (!overlays.length) throw new Error('The Word page editor has no editable paragraphs. Choose the file again.');
+    const overlays = [...(container?.querySelectorAll(selector) || [])];
+    if (!overlays.length) throw new Error('No editable Word text blocks were found. Choose the file again.');
     const zip = await JSZip.loadAsync(file), documentPart = zip.file('word/document.xml');
     if (!documentPart) throw new Error('This Word file has no main document text part.');
     const xml = await documentPart.async('string'), documentXml = new DOMParser().parseFromString(xml, 'application/xml');
@@ -438,17 +438,16 @@
     };
     const normalize = text => String(text || '').normalize('NFC').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
     const paragraphText = paragraphs.map(paragraph => normalize(readWordText(paragraph)));
-    const used = new Set(); let cursor = 0, updatedParagraphs = 0, skippedParagraphs = 0;
-    for (const overlay of overlays) {
-      const original = normalize(overlay.dataset.originalText), edited = normalize(overlay.innerText || overlay.textContent);
-      if (edited === original) continue;
-      let index = paragraphText.findIndex((text, candidate) => candidate >= cursor && !used.has(candidate) && text === original);
-      if (index < 0) index = paragraphText.findIndex((text, candidate) => !used.has(candidate) && text === original);
+    const changes = overlays.map(overlay => ({ original: normalize(overlay.dataset.originalText), text: overlay.innerText || overlay.textContent || '' })).filter(change => normalize(change.text) !== change.original);
+    if (!changes.length) throw new Error('No translated or edited text differs from the source paragraphs.');
+    const matches = TransformoDocxTextMapping.matchDocxParagraphs(paragraphText, changes.map(change => change.original));
+    let updatedParagraphs = 0, skippedParagraphs = 0;
+    for (const [changeIndex, change] of changes.entries()) {
+      const index = matches[changeIndex];
       if (index < 0) { skippedParagraphs++; continue; }
-      used.add(index); cursor = Math.max(cursor, index + 1);
       const paragraph = paragraphs[index], textNodes = [...paragraph.getElementsByTagNameNS(wordNs, 't')];
       for (const localName of ['tab', 'br', 'cr']) [...paragraph.getElementsByTagNameNS(wordNs, localName)].forEach(node => node.remove());
-      const text = overlay.innerText || overlay.textContent || '';
+      const text = change.text;
       const textParts = text.split(/\r?\n/);
       if (textNodes.length) {
         textNodes[0].textContent = textParts[0];
@@ -472,11 +471,14 @@
       }
       updatedParagraphs++;
     }
-    if (!updatedParagraphs) throw new Error('No edited paragraph could be matched to the Word document body. Download the visual PDF instead.');
+    if (!updatedParagraphs) throw new Error('No changed text block could be matched to a source Word paragraph. The original file was left unchanged.');
     zip.file(documentPart.name, new XMLSerializer().serializeToString(documentXml));
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    return { blob, filename: `${safeBase(file.name)}-edited.docx`, updatedParagraphs, skippedParagraphs };
+    return { blob, filename: `${safeBase(file.name)}-${suffix}.docx`, updatedParagraphs, skippedParagraphs };
   }
+
+  async function exportDocxEditedDocx(file, container) { return exportDocxOverlay(file, container, '.docx-editing-block', 'edited'); }
+  async function exportDocxTranslatedDocx(file, container) { return exportDocxOverlay(file, container, '.docx-translation-block', 'translated'); }
 
   async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
     requireLibraries('docx', 'JSZip');
@@ -506,6 +508,7 @@
     const rtl = /^(ar|he)(?:-|$)/i.test(targetLanguage); let overflowBlocks = 0;
     blocks.forEach((block, index) => {
       const overlay = document.createElement('div'); overlay.className = 'docx-translation-block'; overlay.textContent = translations[index];
+      overlay.dataset.originalText = block.text;
       Object.assign(overlay.style, { left: `${block.x}px`, top: `${block.y}px`, width: `${block.width}px`, height: `${block.height}px`, fontFamily: block.fontFamily, fontSize: `${block.fontSize}px`, fontWeight: block.fontWeight, fontStyle: block.fontStyle, lineHeight: `${block.lineHeight}px`, textAlign: block.textAlign === 'start' ? (rtl ? 'right' : 'left') : block.textAlign, textIndent: block.textIndent, direction: rtl ? 'rtl' : block.direction, color: '#171717' });
       layers.get(block.page).append(overlay); block.element.classList.add('docx-translation-masked');
       let size = block.fontSize, lineHeight = block.lineHeight;
@@ -1101,5 +1104,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
