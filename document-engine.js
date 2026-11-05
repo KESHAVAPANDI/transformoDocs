@@ -271,6 +271,93 @@
     });
   }
 
+  function clearDocxEdit(container) {
+    if (!container) return;
+    container.querySelectorAll('.docx-editing-layer').forEach(layer => layer.remove());
+    container.querySelectorAll('.docx-editing-masked').forEach(element => element.classList.remove('docx-editing-masked'));
+    container.querySelectorAll('section.docx').forEach(page => page.classList.remove('docx-editing-page'));
+  }
+
+  function setDocxEditMode(container, mode) {
+    if (!container) return;
+    const edited = mode === 'edited';
+    container.querySelectorAll('section.docx').forEach(page => {
+      page.classList.toggle('docx-editing-page', edited);
+      page.querySelectorAll('.docx-editing-masked').forEach(element => element.classList.toggle('docx-editing-masked', edited));
+      const layer = page.querySelector('.docx-editing-layer');
+      if (layer) layer.style.display = edited ? 'block' : 'none';
+    });
+  }
+
+  function createDocxEditOverlay(container) {
+    const pages = [...(container?.querySelectorAll('section.docx') || [])];
+    if (!pages.length) throw new Error('The Word page preview is unavailable. Choose the file again.');
+    clearDocxTranslation(container); clearDocxEdit(container);
+    const blocks = [];
+    pages.forEach((page, pageIndex) => {
+      const pageRect = page.getBoundingClientRect();
+      for (const element of page.querySelectorAll('p')) {
+        const text = (element.innerText || element.textContent || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n[ \t]+/g, '\n').trim();
+        if (!text) continue;
+        const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);
+        if (bounds.width < 2 || bounds.height < 2) continue;
+        const fontSize = Math.max(5, parseFloat(style.fontSize) || 11), lineHeight = Math.max(fontSize, parseFloat(style.lineHeight) || fontSize * 1.2);
+        blocks.push({ page, pageIndex, element, text, x: bounds.left - pageRect.left, y: bounds.top - pageRect.top, width: bounds.width, height: bounds.height, fontSize, lineHeight, fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, textAlign: style.textAlign, textIndent: style.textIndent, direction: style.direction });
+      }
+    });
+    if (!blocks.length) throw new Error('No editable Word paragraphs were found in this document.');
+    const layers = new Map();
+    pages.forEach(page => {
+      page.classList.add('docx-editing-page');
+      const layer = document.createElement('div'); layer.className = 'docx-editing-layer'; layer.setAttribute('role', 'group'); layer.setAttribute('aria-label', 'Editable Word page');
+      page.append(layer); layers.set(page, layer);
+    });
+    blocks.forEach(block => {
+      const overlay = document.createElement('div');
+      overlay.className = 'docx-editing-block'; overlay.textContent = block.text;
+      overlay.contentEditable = 'true'; overlay.spellcheck = true; overlay.setAttribute('role', 'textbox'); overlay.setAttribute('aria-label', `Edit paragraph on page ${block.pageIndex + 1}`); overlay.setAttribute('aria-multiline', 'true');
+      Object.assign(overlay.style, { left: `${block.x}px`, top: `${block.y}px`, width: `${block.width}px`, height: `${block.height}px`, fontFamily: block.fontFamily, fontSize: `${block.fontSize}px`, fontWeight: block.fontWeight, fontStyle: block.fontStyle, lineHeight: `${block.lineHeight}px`, textAlign: block.textAlign, textIndent: block.textIndent, direction: block.direction, color: '#171717' });
+      overlay.dataset.baseFontSize = String(block.fontSize); overlay.dataset.baseLineHeight = String(block.lineHeight); overlay.dataset.originalHeight = String(block.height);
+      block.element.classList.add('docx-editing-masked'); layers.get(block.page).append(overlay);
+    });
+    const report = () => {
+      for (const overlay of container.querySelectorAll('.docx-editing-block')) {
+        let size = Number(overlay.dataset.baseFontSize), lineHeight = Number(overlay.dataset.baseLineHeight), maxHeight = Number(overlay.dataset.originalHeight);
+        overlay.style.fontSize = `${size}px`; overlay.style.lineHeight = `${lineHeight}px`;
+        while (overlay.scrollHeight > maxHeight + 1 && size > 5) { size = Math.max(5, size - .5); lineHeight = Math.max(size * 1.05, Number(overlay.dataset.baseLineHeight) * size / Number(overlay.dataset.baseFontSize)); overlay.style.fontSize = `${size}px`; overlay.style.lineHeight = `${lineHeight}px`; }
+        overlay.classList.toggle('docx-edit-overflow', overlay.scrollHeight > maxHeight + 1);
+      }
+      const overflowBlocks = container.querySelectorAll('.docx-editing-block.docx-edit-overflow').length;
+      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length } }));
+    };
+    container.querySelectorAll('.docx-editing-block').forEach(overlay => overlay.addEventListener('input', report));
+    report(); setDocxEditMode(container, 'edited');
+    return { pages: pages.length, blocks: blocks.length };
+  }
+
+  async function exportDocxEditedPdf(file, container, onProgress = () => {}) {
+    requireLibraries('PDFLib', 'html2canvas');
+    const pages = [...(container?.querySelectorAll('section.docx') || [])];
+    if (!pages.length || !container.querySelector('.docx-editing-layer')) throw new Error('The Word editing preview is unavailable. Choose the file again.');
+    setDocxEditMode(container, 'edited');
+    const overflowBlocks = container.querySelectorAll('.docx-editing-block.docx-edit-overflow').length;
+    const output = await PDFDocument.create(), restoreHost = expandDocxPreviewHost(container);
+    onProgress(0, pages.length);
+    try {
+      for (const [index, page] of pages.entries()) {
+        const bounds = page.getBoundingClientRect(), width = bounds.width || page.offsetWidth, height = bounds.height || page.offsetHeight;
+        if (!(width > 0 && height > 0)) throw new Error(`Word page ${index + 1} has no measurable size.`);
+        const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!imageBlob) throw new Error(`Edited Word page ${index + 1} could not be captured.`);
+        const image = await output.embedPng(await imageBlob.arrayBuffer()), pdfPage = output.addPage([width * .75, height * .75]);
+        pdfPage.drawImage(image, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
+        canvas.width = 1; canvas.height = 1; onProgress(index + 1, pages.length);
+      }
+    } finally { restoreHost(); }
+    return { blob: bytesToBlob(await output.save()), filename: `${safeBase(file.name)}-edited.pdf`, overflowBlocks };
+  }
+
   async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}) {
     requireLibraries('docx', 'JSZip');
     if (!supportsTranslation()) throw new Error('This browser does not provide its built-in Translator API. Open Transformo in a supported desktop browser to translate Word documents on this device.');
@@ -702,5 +789,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, exportDocxEditedPdf, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateLines, exportPositionedPdf, download };
 })();

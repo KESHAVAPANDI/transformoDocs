@@ -106,6 +106,13 @@
 .docx-translation-masked,.docx-translation-masked *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;text-decoration-color:transparent!important}
 .docx-translation-block{position:absolute;box-sizing:border-box;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:0;color:#171717;text-shadow:none}
 .docx-translation-tabs{flex:none}
+.docx-preview-host section.docx.docx-editing-page{position:relative!important}
+.docx-editing-layer{position:absolute;z-index:21;inset:0;pointer-events:none}
+.docx-editing-masked,.docx-editing-masked *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;text-decoration-color:transparent!important}
+.docx-editing-block{position:absolute;box-sizing:border-box;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:0;color:#171717;text-shadow:none;pointer-events:auto;outline:1px solid transparent;border-radius:2px;cursor:text;transition:background .15s,outline-color .15s,box-shadow .15s}
+.docx-editing-block:hover{background:rgba(171,154,239,.035);outline-color:rgba(147,127,213,.2)}
+.docx-editing-block:focus{outline-color:rgba(128,111,205,.76);background:rgba(179,164,245,.08);box-shadow:0 0 0 2px rgba(153,136,226,.12)}
+.docx-editing-block.docx-edit-overflow{outline:1px solid rgba(240,153,126,.65);background:rgba(229,121,100,.08)}
 @media(max-width:700px){.docx-preview-host{max-height:70vh;padding:8px}.docx-preview-host .docx-wrapper{align-items:flex-start!important}}
 
 

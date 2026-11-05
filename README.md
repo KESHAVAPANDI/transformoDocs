@@ -39,7 +39,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | Workspace | What it is for |
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to text, PNG, or JPG, preview DOCX pages before creating a visual PDF, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
-| **Layout-aware editing and translation** | Work from full-page PDF previews, OCR scanned pages in an expandable set of languages, translate related lines together as positioned text blocks with the browser Translator API when available, swap languages quickly, compare original and translated pages, and download a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. The Edit tool places editable text fields directly over the page at their original positions. |
+| **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions, with paragraph text auto-fitted inside its original Word page box. OCR scanned PDFs in an expandable set of languages, translate related text blocks with the browser Translator API when available, compare original and transformed pages, and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
 | **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, create and translate timed subtitle cues, preview them in place, burn them into a WebM export, and download a separate SRT subtitle file. |
 
 ### Small details, big difference
@@ -73,7 +73,7 @@ PDF compression is an image-based option for visual fidelity: it redraws each pa
 
 The next step is to expand format coverage and make the layout-aware workflows more robust. A practical path could look like this:
 
-1. **Expand Office editing.** Add reversible DOCX editing and improve PPTX and spreadsheet workflows while retaining their native text, styles, and structures.
+1. **Expand Office editing.** Make DOCX edits reversible and preserve the source document structure, then add in-place PPTX and spreadsheet editing while retaining their native text, styles, and structures.
 2. **Improve layout translation.** The current PDF workflow uses positioned text lines and marks up the same page coordinates. Add paragraph context, font matching, non-white background handling, and an overflow review before export.
 3. **Make editing reversible.** Keep the source untouched, store edits as structured operations, and offer a clear before/after comparison with undo.
 4. **Improve OCR for scans.** Add confidence scores, better rotation and column handling, and an in-app review step before edits or translation.
@@ -106,7 +106,7 @@ transformoDocs/
 
 PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and multi-clip video timeline export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
-- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. The output text is not searchable or selectable.
+- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. DOCX editing, translation, and visual conversion also export image-backed PDFs; output text is not searchable or selectable.
 - Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
 - Page selection for splitting previews up to 80 pages. Enter a page range to extract later pages.
 - Translation previews show up to 24 pages at a time; every page is included in the exported PDF. The in-page editor previews up to 80 pages.
@@ -116,7 +116,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - The translation picker follows Chrome's documented language-code list, while the chosen pair is still checked against the browser's actual model availability. The API is not available in every browser. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/).
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. Subtitle translation uses the browser's built-in Translator API and translates from English. Transitions and MP4 export are not implemented yet.
-- DOCX-to-PDF uses a browser-rendered page preview and exports each page as an image to retain its visual layout. It is a best-effort rendering rather than a pixel-perfect Word export, and the PDF text is not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. Office document editing is not implemented yet.
+- DOCX editing and DOCX-to-PDF use a browser-rendered page preview; editing overlays editable paragraphs at their source page positions and exports each page as an image. This is a best-effort rendering rather than a pixel-perfect Word export, and the PDF text is not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. DOCX paragraph editing is supported, while native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
 - Files selected for the workspace are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
 
 ## 💡 More ideas worth exploring
