@@ -482,6 +482,13 @@
 
   async function translateDocxInPlace(container, sourceLanguage, targetLanguage, onProgress = () => {}, translationOptions = {}) {
     requireLibraries('docx', 'JSZip');
+    const blocks = collectDocxTranslationBlocks(container);
+    if (!blocks.length) throw new Error('No readable Word paragraphs were found to translate.');
+    const translations = await translateTextBlocks(blocks.map(block => block.text), sourceLanguage, targetLanguage, onProgress, translationOptions);
+    return applyDocxTranslationTexts(container, translations, targetLanguage);
+  }
+
+  function collectDocxTranslationBlocks(container) {
     const pages = [...(container?.querySelectorAll('section.docx') || [])];
     if (!pages.length) throw new Error('The Word page preview is unavailable. Choose the file again.');
     const blocks = [];
@@ -496,9 +503,16 @@
         blocks.push({ page, pageIndex, element, text, x: bounds.left - pageRect.left, y: bounds.top - pageRect.top, width: bounds.width, height: bounds.height, fontSize, lineHeight, fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, textAlign: style.textAlign, textIndent: style.textIndent, direction: style.direction });
       }
     });
-    if (!blocks.length) throw new Error('No readable Word paragraphs were found to translate.');
-    const translations = await translateTextBlocks(blocks.map(block => block.text), sourceLanguage, targetLanguage, onProgress, translationOptions);
+    return blocks;
+  }
+
+  function applyDocxTranslationTexts(container, translations, targetLanguage) {
+    const pages = [...(container?.querySelectorAll('section.docx') || [])];
+    if (!pages.length) throw new Error('The Word page preview is unavailable. Choose the file again.');
     clearDocxTranslation(container);
+    const blocks = collectDocxTranslationBlocks(container);
+    if (!blocks.length) throw new Error('No readable Word paragraphs were found to translate.');
+    if (!Array.isArray(translations) || translations.length !== blocks.length || translations.some(text => typeof text !== 'string')) throw new Error('The saved Word translation does not match this document. Translate it again.');
     const layers = new Map();
     pages.forEach(page => {
       page.classList.add('docx-translation-page');
@@ -517,6 +531,10 @@
     });
     setDocxTranslationMode(container, 'translated');
     return overflowBlocks;
+  }
+
+  function captureDocxTranslationTexts(container) {
+    return [...(container?.querySelectorAll('.docx-translation-block') || [])].map(overlay => overlay.textContent || '');
   }
 
   async function exportDocxTranslatedPdf(file, container, overflowLines = 0, onProgress = () => {}) {
@@ -1104,5 +1122,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, applyDocxTranslationTexts, captureDocxTranslationTexts, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();

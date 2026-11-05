@@ -1,7 +1,7 @@
 const iconTypes={pdf:'pdf',docx:'docx',doc:'docx',xlsx:'xlsx',xls:'xlsx',pptx:'pptx',ppt:'pptx',mp4:'mp4',mov:'mp4',webm:'mp4'};
 let files=[];
 const workspaceFileIds=new WeakMap();
-let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, translationResultDocument=null, translationHistory=null, translationLineBaseline=null, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false, docxTranslationHost=null, docxTranslationReady=false, docxTranslationToken=0, docxEditHost=null, docxEditReady=false, docxEditToken=0, translationAvailabilityToken=0;
+let activeFilter='all', pendingTask='Translate', toastTimer, taskPages=[], selectedTaskFiles=[], previewUrls=[], translationPreviews={source:null,translated:null}, translatedDocument=null, translationResultDocument=null, translationHistory=null, translationLineBaseline=null, translationVariants=TransformoTranslationVariants.createTranslationVariants(3), translationVariantBusy=false, translationVariantToken=0, previousView='documents', organizeOrder=[], organizePreviewPages=[], selectedSplitPages=new Set(), splitPreviewPages=[], workspaceSelectionIds=new Set(), selectedConversion='', selectedCompression='balanced', docxPreviewToken=0, docxPreviewReady=false, docxTranslationHost=null, docxTranslationReady=false, docxTranslationToken=0, docxEditHost=null, docxEditReady=false, docxEditToken=0, translationAvailabilityToken=0;
 const translationLanguages=[['en','English'],['ja','日本語'],['es','Español'],['fr','Français'],['hi','हिन्दी'],['ta','தமிழ்'],['de','Deutsch'],['zh','中文'],['pt','Português'],['ko','한국어'],['ar','العربية'],['it','Italiano'],['ru','Русский'],['nl','Nederlands'],['bn','বাংলা'],['bg','Български'],['cs','Čeština'],['da','Dansk'],['el','Ελληνικά'],['fi','Suomi'],['he','עברית'],['hr','Hrvatski'],['hu','Magyar'],['id','Bahasa Indonesia'],['kn','ಕನ್ನಡ'],['lt','Lietuvių'],['mr','मराठी'],['no','Norsk'],['pl','Polski'],['ro','Română'],['sk','Slovenčina'],['sl','Slovenščina'],['sv','Svenska'],['te','తెలుగు'],['th','ไทย'],['tr','Türkçe'],['uk','Українська'],['vi','Tiếng Việt'],['zh-Hant','繁體中文']];
 const ocrLanguages=[['eng','English'],['jpn','日本語'],['spa','Español'],['fra','Français'],['hin','हिन्दी'],['tam','தமிழ்'],['deu','Deutsch'],['chi_sim','简体中文'],['por','Português'],['kor','한국어'],['ara','العربية'],['ita','Italiano'],['rus','Русский'],['nld','Nederlands'],['ben','বাংলা'],['bul','Български'],['ces','Čeština'],['dan','Dansk'],['ell','Ελληνικά'],['fin','Suomi'],['heb','עברית'],['hrv','Hrvatski'],['hun','Magyar'],['ind','Bahasa Indonesia'],['kan','ಕನ್ನಡ'],['mar','मराठी'],['nor','Norsk'],['pol','Polski'],['ron','Română'],['slk','Slovenčina'],['slv','Slovenščina'],['swe','Svenska'],['tel','తెలుగు'],['tha','ไทย'],['tur','Türkçe'],['ukr','Українська'],['vie','Tiếng Việt'],['chi_tra','繁體中文']];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -71,7 +71,7 @@ function toast(message){const el=$('#toast');el.textContent=message;el.classList
 function setView(view){$$('.page-view').forEach(v=>v.classList.toggle('visible',v.id===`${view}-view`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===(view==='tool'?'documents':view)));$('#crumb-current').textContent=view==='videos'?'Video studio':view==='tool'?$('#tool-title').textContent:'Documents';window.scrollTo({top:0,behavior:'smooth'});}
 function openTask(task,conversionPreset=''){
   docxPreviewToken++;docxPreviewReady=false;docxTranslationToken++;docxTranslationReady=false;docxTranslationHost=null;docxEditToken++;docxEditReady=false;docxEditHost=null;
-  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;translationResultDocument=null;translationHistory=null;translationLineBaseline=null;organizeOrder=[];organizePreviewPages=[];selectedSplitPages=new Set();splitPreviewPages=[];workspaceSelectionIds=new Set();selectedConversion='';selectedCompression='balanced';
+  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];translationPreviews={source:null,translated:null};translatedDocument=null;translationResultDocument=null;translationHistory=null;translationLineBaseline=null;translationVariants.clear();translationVariantBusy=false;translationVariantToken++;organizeOrder=[];organizePreviewPages=[];selectedSplitPages=new Set();splitPreviewPages=[];workspaceSelectionIds=new Set();selectedConversion='';selectedCompression='balanced';
   if($('.page-view.visible')?.id!=='tool-view')previousView=$('.page-view.visible')?.id.replace('-view','')||'documents';
   pendingTask=task;selectedConversion=conversionPreset;taskPages=[];selectedTaskFiles=[];
   const configs={Translate:['Translate a document','Translate a PDF or Word document while keeping text anchored to its page.'],Edit:['Edit document text','Change PDF or Word text directly over the page at its original position.'],Organize:['Organize PDF pages','Reorder, rotate, and remove pages while keeping the document in view.'],Convert:['Convert files','Choose a card for PDF, Office, image, or text conversions.'],Merge:['Merge PDFs','Arrange your files, then combine them in that order.'],Split:['Split a PDF','Extract selected pages into a new PDF.'],Compress:['Compress a PDF','Reduce image weight with a selectable quality preset.'],Watermark:['Add a PDF watermark','Stamp a light, centered watermark across every page.'],Number:['Add page numbers','Add a clean page number to the bottom of every page.']};
@@ -161,7 +161,7 @@ async function renderDocxEditWorkspace(file){
 async function renderDocxTranslationWorkspace(file){
   const root=$('#line-editor');if(!root)return;
   const token=++docxTranslationToken;docxTranslationReady=false;docxTranslationHost=null;root.hidden=false;
-  root.innerHTML='<div class="document-preview-heading"><div><strong>Word page translation</strong><span>Preparing the rendered pages…</span></div><div class="document-preview-actions"><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button><button type="button" class="secondary-button reset-edit-button" id="download-translated-docx" disabled>Download translated Word</button></div></div><div class="position-note">Paragraphs translate in their original page boxes. Longer translations may need review. Download the editable Word file or an image-backed PDF.</div><div class="document-preview-loading"><span class="preview-spinner"></span><span>Rendering Word pages…</span></div><div class="docx-preview-host" aria-label="Word document page preview"></div>';
+  root.innerHTML='<div class="document-preview-heading"><div><strong>Word page translation</strong><span>Preparing the rendered pages…</span></div><div class="document-preview-actions"><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button><button type="button" class="secondary-button reset-edit-button" id="download-translated-docx" disabled>Download translated Word</button></div></div><div id="translation-variants" class="translation-variants" hidden></div><div class="position-note">Paragraphs translate in their original page boxes. Longer translations may need review. Download the editable Word file or an image-backed PDF.</div><div class="document-preview-loading"><span class="preview-spinner"></span><span>Rendering Word pages…</span></div><div class="docx-preview-host" aria-label="Word document page preview"></div>';
   const host=root.querySelector('.docx-preview-host');
   try{
     const pageCount=await DocumentEngine.renderDocxPreview(file,host);
@@ -173,6 +173,7 @@ async function renderDocxTranslationWorkspace(file){
     note.textContent='Compare the original and translated pages. Download an editable DOCX with matched source paragraphs, or a visual PDF for fixed page layout.';
     const tabs=document.createElement('div');tabs.className='docx-translation-tabs document-preview-tabs';tabs.innerHTML='<button type="button" class="document-preview-tab active" data-docx-preview="original">Original</button><button type="button" class="document-preview-tab" data-docx-preview="translated" disabled>Translated</button>';
     root.querySelector('.document-preview-actions').prepend(tabs);
+    renderTranslationVariantPicker(root);
     tabs.addEventListener('click',event=>{const button=event.target.closest('[data-docx-preview]');if(!button||button.disabled)return;DocumentEngine.setDocxTranslationMode(host,button.dataset.docxPreview);tabs.querySelectorAll('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab===button))});
     root.querySelector('#undo-translation').addEventListener('click',undoTranslation);root.querySelector('#redo-translation').addEventListener('click',redoTranslation);
     const wordExport=root.querySelector('#download-translated-docx');
@@ -299,6 +300,51 @@ async function renderVisualPdfEditor(file){
   updateHistoryControls();
   if(needsOcr)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
 }
+function translationLanguageName(code){return translationLanguages.find(([value])=>value===code)?.[1]||code}
+function translationDocumentMetadata(result){const {blob,...metadata}=result;return metadata}
+function renderTranslationVariantPicker(root=$('#line-editor')){
+  const picker=root?.querySelector('#translation-variants');if(!picker)return;
+  const variants=translationVariants.items;picker.hidden=!variants.length;
+  picker.innerHTML=variants.length?`<span class="translation-variants-label">Recent translations</span><div class="translation-variant-list" role="group" aria-label="Recent translation results">${variants.map(variant=>{const selected=translatedDocument&&translationVariants.current?.id===variant.id;return `<button type="button" class="translation-variant${selected?' selected':''}" data-translation-variant="${variant.id}" aria-pressed="${!!selected}" ${translationVariantBusy?'disabled':''}>${esc(translationLanguageName(variant.source))} <span>→</span> ${esc(translationLanguageName(variant.target))}</button>`}).join('')}</div>`:'';
+  if(picker.dataset.bound)return;
+  picker.dataset.bound='true';picker.addEventListener('click',event=>{const button=event.target.closest('[data-translation-variant]');if(button)selectTranslationVariant(button.dataset.translationVariant)});
+}
+function syncTranslationLanguagePair(source,target){
+  const sourceField=$('#source-language'),targetField=$('#target-language');if(!sourceField||!targetField)return;
+  sourceField.value=source;targetField.value=target;
+  $$('[data-language-target="source-language"],[data-language-target="target-language"]').forEach(button=>{const field=document.getElementById(button.dataset.languageTarget),selected=button.dataset.languageValue===field.value;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});
+}
+async function selectTranslationVariant(id){
+  if(translationVariantBusy)return;
+  const activeVariantId=translationVariants.current?.id,variant=translationVariants.select(id);if(!variant||activeVariantId===id&&translatedDocument)return;
+  const token=++translationVariantToken;translationVariantBusy=true;renderTranslationVariantPicker();
+  try{
+    const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx');
+    deactivateTranslationResult();syncTranslationLanguagePair(variant.source,variant.target);
+    if(isDocx){
+      if(!docxTranslationHost)return;
+      const overflowLines=DocumentEngine.applyDocxTranslationTexts(docxTranslationHost,variant.texts,variant.target);
+      const result=await DocumentEngine.exportDocxTranslatedPdf(selectedTaskFiles[0],docxTranslationHost,overflowLines);
+      if(token!==translationVariantToken)return;
+      translatedDocument=result;
+      translationResultDocument=translatedDocument;
+      translationHistory=TransformoEditHistory.createEditHistory(['original']);translationHistory.record(['translated']);
+      DocumentEngine.setDocxTranslationMode(docxTranslationHost,'translated');
+      $$('[data-docx-preview]').forEach(tab=>{const selected=tab.dataset.docxPreview==='translated';tab.disabled=tab.dataset.docxPreview==='translated'&&!translatedDocument;tab.classList.toggle('active',selected)});
+    }else{
+      if(!translationLineBaseline)return;
+      restorePdfTranslationState(variant.state);
+      const result=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true,variant.target);
+      if(token!==translationVariantToken)return;
+      translatedDocument=result;translationResultDocument=translatedDocument;
+      translationHistory=TransformoEditHistory.createEditHistory(translationLineBaseline);translationHistory.record(variant.state);
+      await renderTranslationPreview(translatedDocument.blob,token);
+      if(token!==translationVariantToken)return;
+      const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
+    }
+  }catch(error){if(token===translationVariantToken){deactivateTranslationResult();toast(error.message||'The saved translation could not be restored.')}}
+  finally{if(token===translationVariantToken){translationVariantBusy=false;renderTranslationVariantPicker();updateTranslationHistoryControls();updateTaskCta()}}
+}
 function drawTranslationPreview(mode){
   const root=$('#translation-page-view');if(!root)return;
   root.classList.toggle('document-page-comparison',mode==='compare');
@@ -315,32 +361,40 @@ function drawTranslationPreview(mode){
 function capturePdfTranslationState(){return taskPages.flatMap(page=>page.lines.map(line=>JSON.stringify([line.edited??null,line.translationBlockId??null,line.translationText??null])))}
 function restorePdfTranslationState(state){let index=0;for(const page of taskPages)for(const line of page.lines){const [edited,blockId,text]=JSON.parse(state[index++]||'[null,null,null]');if(edited===null)delete line.edited;else line.edited=edited;if(blockId===null)delete line.translationBlockId;else line.translationBlockId=blockId;if(text===null)delete line.translationText;else line.translationText=text}}
 function updateTranslationHistoryControls(){const undo=$('#undo-translation'),redo=$('#redo-translation'),active=!!translatedDocument,hasResult=!!translationResultDocument;if(undo)undo.disabled=!active||!translationHistory?.canUndo;if(redo)redo.disabled=active||!hasResult||!translationHistory?.canRedo;const translatedTab=$('[data-document-preview="translated"]')||$('[data-docx-preview="translated"]'),compareTab=$('[data-document-preview="compare"]'),wordExport=$('#download-translated-docx');if(translatedTab)translatedTab.disabled=!active;if(compareTab)compareTab.disabled=!active;if(wordExport)wordExport.disabled=!active}
-function undoTranslation(){if(!translationHistory||!translatedDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.undo(isDocx?['translated']:capturePdfTranslationState());if(!state)return;translationResultDocument=translatedDocument;translatedDocument=null;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='original'))}else{restorePdfTranslationState(state);drawTranslationPreview('source')}updateTranslationHistoryControls();updateTaskCta();toast('Translation undone. The original stays unchanged; redo to restore this result.')}
-function redoTranslation(){if(!translationHistory||translatedDocument||!translationResultDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.redo(isDocx?['original']:capturePdfTranslationState());if(!state)return;translatedDocument=translationResultDocument;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'translated');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='translated'))}else{restorePdfTranslationState(state);drawTranslationPreview('translated')}updateTranslationHistoryControls();updateTaskCta();toast('Translation restored.')}
-async function renderTranslationPreview(file){
+function undoTranslation(){if(!translationHistory||!translatedDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.undo(isDocx?['translated']:capturePdfTranslationState());if(!state)return;translationResultDocument=translatedDocument;translatedDocument=null;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='original'))}else{restorePdfTranslationState(state);drawTranslationPreview('source')}renderTranslationVariantPicker();updateTranslationHistoryControls();updateTaskCta();toast('Translation undone. The original stays unchanged; redo to restore this result.')}
+function redoTranslation(){if(!translationHistory||translatedDocument||!translationResultDocument)return;const isDocx=selectedTaskFiles[0]?.name.toLowerCase().endsWith('.docx'),state=translationHistory.redo(isDocx?['original']:capturePdfTranslationState());if(!state)return;translatedDocument=translationResultDocument;if(isDocx){DocumentEngine.setDocxTranslationMode(docxTranslationHost,'translated');$$('[data-docx-preview]').forEach(tab=>tab.classList.toggle('active',tab.dataset.docxPreview==='translated'))}else{restorePdfTranslationState(state);drawTranslationPreview('translated')}renderTranslationVariantPicker();updateTranslationHistoryControls();updateTaskCta();toast('Translation restored.')}
+async function renderTranslationPreview(file,variantToken=null){
   const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Preparing full-page document preview…</span></div>';
   const preview=await DocumentEngine.renderPdfPages(file);
+  if(variantToken!==null&&variantToken!==translationVariantToken)return;
   const mode=translatedDocument?'translated':'source',old=translationPreviews[mode];
   old?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
   translationPreviews[mode]={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
   const hasScannedPages=taskPages.some(page=>!page.lines.length),ocr=hasScannedPages?ocrPanel():'';
   const overflow=translatedDocument?.overflowLines?`<div class="position-note position-note-warning">${translatedDocument.overflowLines} translated text area${translatedDocument.overflowLines===1?' may':'s may'} overflow its original page region. Check the translated preview before downloading.</div>`:'';
-  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-actions"><div class="document-preview-tabs" role="group" aria-label="Document comparison view"><button type="button" class="document-preview-tab active" data-document-preview="source" aria-pressed="${!translatedDocument}">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" aria-pressed="false" ${translatedDocument?'':'disabled'}>Translated</button><button type="button" class="document-preview-tab" data-document-preview="compare" aria-pressed="false" ${translatedDocument?'':'disabled'}>Compare</button></div><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-actions"><div class="document-preview-tabs" role="group" aria-label="Document comparison view"><button type="button" class="document-preview-tab active" data-document-preview="source" aria-pressed="${!translatedDocument}">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" aria-pressed="false" ${translatedDocument?'':'disabled'}>Translated</button><button type="button" class="document-preview-tab" data-document-preview="compare" aria-pressed="false" ${translatedDocument?'':'disabled'}>Compare</button></div><button type="button" class="secondary-button reset-edit-button" id="undo-translation" disabled>↶ Undo translation</button><button type="button" class="secondary-button reset-edit-button" id="redo-translation" disabled>↷ Redo translation</button></div></div><div id="translation-variants" class="translation-variants" hidden></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
+  renderTranslationVariantPicker(root);
   root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{const mode=button.dataset.documentPreview;if(mode==='compare'?translationPreviews.source&&translationPreviews.translated:translationPreviews[mode])drawTranslationPreview(mode)}));
   root.querySelector('#undo-translation').addEventListener('click',undoTranslation);root.querySelector('#redo-translation').addEventListener('click',redoTranslation);
   if(hasScannedPages)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
   drawTranslationPreview(translatedDocument?'translated':'source');updateTranslationHistoryControls();
 }
-function discardTranslationResult(){
+function deactivateTranslationResult(){
   if(pendingTask!=='Translate')return;
   if(translationLineBaseline)restorePdfTranslationState(translationLineBaseline);
   translationPreviews.translated?.pages.forEach(page=>{URL.revokeObjectURL(page.url);previewUrls=previewUrls.filter(url=>url!==page.url)});
-  translationPreviews.translated=null;translatedDocument=null;translationResultDocument=null;translationHistory=null;translationLineBaseline=null;
+  translationPreviews.translated=null;translatedDocument=null;translationResultDocument=null;translationHistory=null;
   if(docxTranslationHost){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original')}
   const docxTab=$('[data-docx-preview="translated"]');if(docxTab)docxTab.disabled=true;
   const tab=$('[data-document-preview="translated"]');if(tab)tab.disabled=true;
   const compareTab=$('[data-document-preview="compare"]');if(compareTab)compareTab.disabled=true;
   if(translationPreviews.source)drawTranslationPreview('source');
+  updateTranslationHistoryControls();updateTaskCta();
+}
+function discardTranslationResult(){
+  if(pendingTask!=='Translate')return;
+  translationVariantToken++;translationVariantBusy=false;
+  deactivateTranslationResult();translationLineBaseline=null;translationVariants.clear();renderTranslationVariantPicker();
   updateTranslationHistoryControls();updateTaskCta();
 }
 async function runOcrOnCurrentPdf(){
@@ -352,7 +406,7 @@ async function runOcrOnCurrentPdf(){
 function readEditedLines(){let index=0;for(const page of taskPages)for(const line of page.lines){const input=$(`[data-line-index="${index++}"]`);if(input)line.edited=input.value}}
 async function translateCurrentLines(){
   if(!selectedTaskFiles[0]){toast('Choose a document first.');return}
-  if(translationResultDocument&&!translatedDocument)discardTranslationResult();
+  if(translationResultDocument&&!translatedDocument)deactivateTranslationResult();
   if(selectedTaskFiles[0].name.toLowerCase().endsWith('.docx')){
     if(!docxTranslationReady||!docxTranslationHost){toast('Wait for the Word page preview to finish.');return}
     if(!translationHistory)translationHistory=TransformoEditHistory.createEditHistory(['original']);
@@ -362,30 +416,31 @@ async function translateCurrentLines(){
       const overflowLines=await DocumentEngine.translateDocxInPlace(docxTranslationHost,source,target,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:detail?.stage==='fallback'?'Switching to DeepL…':detail?.stage==='online'?`Translating online · ${done} of ${total}`:`Translating paragraphs · ${done} of ${total}`},translationOptions);
       button.textContent='Composing translated Word pages…';
       translatedDocument=await DocumentEngine.exportDocxTranslatedPdf(selectedTaskFiles[0],docxTranslationHost,overflowLines,(done,total)=>{button.textContent=`Creating PDF page ${done} of ${total}…`});
-      translationHistory.record(['translated']);translationResultDocument=translatedDocument;updateTranslationHistoryControls();
+       translationHistory.record(['translated']);translationResultDocument=translatedDocument;translationVariants.add({source,target,texts:DocumentEngine.captureDocxTranslationTexts(docxTranslationHost),document:translationDocumentMetadata(translatedDocument)});renderTranslationVariantPicker();updateTranslationHistoryControls();
       const tab=$('[data-docx-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
       button.innerHTML='Download translated PDF <span>↗</span>';
       toast(overflowLines?`Translation ready · ${overflowLines} paragraph${overflowLines===1?' may':'s may'} overflow. Review the page preview.`:'Translated Word document ready · review the page preview before downloading.');
-    }catch(error){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original');translationHistory=null;translationResultDocument=null;translatedDocument=null;updateTranslationHistoryControls();toast(error.message||'The Word document could not be translated.')}
+    }catch(error){deactivateTranslationResult();renderTranslationVariantPicker();toast(error.message||'The Word document could not be translated.')}
     finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
     return;
   }
   if(!taskPages.length){toast('Choose a text-based PDF first.');return}
   if(!taskPages.some(page=>page.lines.length)){toast('Run OCR on the scanned pages before translating.');return}
   readEditedLines();if(!translationHistory){translationLineBaseline=capturePdfTranslationState();translationHistory=TransformoEditHistory.createEditHistory(translationLineBaseline)}
+  const source=$('#source-language').value,target=$('#target-language').value;
   const button=$('#tool-cta');button.disabled=true;
   try{
-    await DocumentEngine.translateLines(taskPages,$('#source-language').value,$('#target-language').value,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:detail?.stage==='fallback'?'Switching to DeepL…':detail?.stage==='online'?`Translating online · ${done} of ${total}`:`Translating document · ${Math.round(done/Math.max(1,total)*100)}%`},getTranslationOptions());
+    await DocumentEngine.translateLines(taskPages,source,target,(done,total,detail)=>{button.textContent=detail?.stage==='download'?`Preparing translation model · ${Math.round(detail.progress*100)}%`:detail?.stage==='fallback'?'Switching to DeepL…':detail?.stage==='online'?`Translating online · ${done} of ${total}`:`Translating document · ${Math.round(done/Math.max(1,total)*100)}%`},getTranslationOptions());
     button.textContent='Composing translated pages…';
-    translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true,$('#target-language').value);
-    translationHistory.record(capturePdfTranslationState());translationResultDocument=translatedDocument;
+    translatedDocument=await DocumentEngine.exportPositionedPdf(selectedTaskFiles[0],taskPages,()=>{},true,target);
+    const state=capturePdfTranslationState();translationHistory.record(state);translationResultDocument=translatedDocument;translationVariants.add({source,target,state,document:translationDocumentMetadata(translatedDocument)});
     await renderTranslationPreview(translatedDocument.blob);
     const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
     button.innerHTML='Download translated PDF <span>↗</span>';
     const textLayerNote=translatedDocument.searchableCharacters?`${translatedDocument.searchableCharacters} characters are searchable.`:'The visual PDF is ready; searchable text could not be added.';
     const skippedTextNote=translatedDocument.skippedSearchableCharacters?` ${translatedDocument.skippedSearchableCharacters} characters could not be indexed.`:'';
     toast(translatedDocument.overflowLines?`Translation ready · ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?' may':'s may'} overflow. ${textLayerNote}${skippedTextNote} Review the page preview.`:`Translated document ready · ${textLayerNote}${skippedTextNote} Review the page preview before downloading.`);
-  }catch(error){discardTranslationResult();toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
+  }catch(error){deactivateTranslationResult();renderTranslationVariantPicker();toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>';updateTaskCta()}
 }
 async function performCurrentTask(){
   const button=$('#tool-cta');button.disabled=true;const label=button.textContent;button.textContent='Working…';
@@ -491,14 +546,15 @@ document.addEventListener('drop',async event=>{
 },true);
 $('#tool-back').addEventListener('click',closeTool);$('#tool-cta').addEventListener('click',performCurrentTask);
 $('#tool-content').addEventListener('click',event=>{
+  if(translationVariantBusy)return;
   const mode=event.target.closest('[data-translation-mode]');
-  if(mode){const field=$('#translation-mode');field.value=mode.dataset.translationMode;$$('[data-translation-mode]').forEach(button=>{const selected=button===mode;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});const consent=$('#translation-consent'),label=consent?.closest('.translation-consent');if(field.value==='local'&&consent)consent.checked=false;if(label)label.hidden=field.value==='local';discardTranslationResult();updateTaskCta();refreshTranslationAvailability();return}
+  if(mode){const field=$('#translation-mode');field.value=mode.dataset.translationMode;$$('[data-translation-mode]').forEach(button=>{const selected=button===mode;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});const consent=$('#translation-consent'),label=consent?.closest('.translation-consent');if(field.value==='local'&&consent)consent.checked=false;if(label)label.hidden=field.value==='local';deactivateTranslationResult();renderTranslationVariantPicker();updateTaskCta();refreshTranslationAvailability();return}
   const swap=event.target.closest('[data-language-swap]');
-  if(swap){const source=$('#source-language'),target=$('#target-language'),nextSource=target.value;target.value=source.value;source.value=nextSource;$$('[data-language-target="source-language"],[data-language-target="target-language"]').forEach(button=>{const field=document.getElementById(button.dataset.languageTarget),selected=button.dataset.languageValue===field.value;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});discardTranslationResult();updateTaskCta();refreshTranslationAvailability();return}
+  if(swap){const source=$('#source-language'),target=$('#target-language'),nextSource=target.value;target.value=source.value;source.value=nextSource;$$('[data-language-target="source-language"],[data-language-target="target-language"]').forEach(button=>{const field=document.getElementById(button.dataset.languageTarget),selected=button.dataset.languageValue===field.value;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});deactivateTranslationResult();renderTranslationVariantPicker();updateTaskCta();refreshTranslationAvailability();return}
   const more=event.target.closest('[data-language-more]');
   if(more){const expanded=more.getAttribute('aria-expanded')!=='true',grid=more.closest('.language-option-grid');grid.classList.toggle('expanded',expanded);more.setAttribute('aria-expanded',String(expanded));more.textContent=expanded?'Fewer languages':'More languages';return}
   const language=event.target.closest('[data-language-target]');
-  if(language){const field=document.getElementById(language.dataset.languageTarget);if(!field)return;field.value=language.dataset.languageValue;language.closest('.language-option-grid').querySelectorAll('[data-language-target]').forEach(button=>{const selected=button===language;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});if(['source-language','target-language'].includes(field.id)){discardTranslationResult();refreshTranslationAvailability()}updateTaskCta();return}
+  if(language){const field=document.getElementById(language.dataset.languageTarget);if(!field)return;field.value=language.dataset.languageValue;language.closest('.language-option-grid').querySelectorAll('[data-language-target]').forEach(button=>{const selected=button===language;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))});if(['source-language','target-language'].includes(field.id)){deactivateTranslationResult();renderTranslationVariantPicker();refreshTranslationAvailability()}updateTaskCta();return}
   const conversion=event.target.closest('[data-conversion-option]');
   if(conversion){selectedConversion=conversion.dataset.conversionOption;syncDocxConversionPreview();updateTaskCta();return}
   const compression=event.target.closest('[data-compression-option]');
@@ -506,7 +562,7 @@ $('#tool-content').addEventListener('click',event=>{
   const file=event.target.closest('[data-workspace-file-id]');
   if(file){const id=file.dataset.workspaceFileId,multiple=['Merge','Convert'].includes(pendingTask);if(multiple){if(workspaceSelectionIds.has(id))workspaceSelectionIds.delete(id);else workspaceSelectionIds.add(id)}else if(workspaceSelectionIds.has(id))workspaceSelectionIds.clear();else{workspaceSelectionIds.clear();workspaceSelectionIds.add(id)}$('#workspace-file-options').querySelectorAll('[data-workspace-file-id]').forEach(button=>button.setAttribute('aria-pressed',String(workspaceSelectionIds.has(button.dataset.workspaceFileId))));$('#workspace-selection-count').textContent=`${workspaceSelectionIds.size} selected`;$('#load-workspace-files').disabled=!workspaceSelectionIds.size}
 });
-$('#tool-content').addEventListener('change',event=>{if(event.target.id==='translation-consent'){discardTranslationResult();updateTaskCta();refreshTranslationAvailability()}});
+$('#tool-content').addEventListener('change',event=>{if(translationVariantBusy)return;if(event.target.id==='translation-consent'){deactivateTranslationResult();renderTranslationVariantPicker();updateTaskCta();refreshTranslationAvailability()}});
 $('#search-trigger').addEventListener('click',showSearch);$('#search-input').addEventListener('input',e=>renderSearch(e.target.value));$('#search-overlay').addEventListener('click',e=>{if(e.target===$('#search-overlay'))$('#search-overlay').hidden=true});$('#search-results').addEventListener('click',e=>{const b=e.target.closest('[data-search]');if(!b)return;const value=b.dataset.search,task=value.split(' ')[0],presets={'PDF to images':'pdf-images','PDF to JPG':'pdf-jpg','PDF to text':'pdf-text','PDF to Word':'pdf-docx','DOCX to PDF':'docx-pdf','DOCX to PNG':'docx-png','DOCX to JPG':'docx-jpg','DOCX to text':'docx-text','PPTX to text':'pptx-text','XLSX to CSV':'xlsx-csv','Images to PDF':'images-pdf','Text to PDF':'text-pdf'};if(presets[value]){$('#search-overlay').hidden=true;openTask('Convert',presets[value])}else if(['Translate','Edit','Organize','Convert','Merge','Split','Compress'].includes(task)){ $('#search-overlay').hidden=true;openTask(task)}else if(value==='Add a watermark'){$('#search-overlay').hidden=true;openTask('Watermark')}else if(value==='Add page numbers'){$('#search-overlay').hidden=true;openTask('Number')}else if(task==='Video'){$('#search-overlay').hidden=true;setView('videos')}else{$('#search-overlay').hidden=true;toast(`Opening ${value}`)}});
 $$('[data-go-documents]').forEach(b=>b.addEventListener('click',()=>setView('documents')));
 document.addEventListener('keydown',e=>{
