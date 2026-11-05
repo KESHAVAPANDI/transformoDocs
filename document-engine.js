@@ -990,27 +990,13 @@
     return overflow;
   }
 
-  const searchableFontFaces = new Map();
-  const searchableFontFamilies = { ja: 'Noto Sans JP', zh: 'Noto Sans SC', 'zh-Hant': 'Noto Sans TC', ko: 'Noto Sans KR', hi: 'Noto Sans Devanagari', mr: 'Noto Sans Devanagari', bn: 'Noto Sans Bengali', ta: 'Noto Sans Tamil', te: 'Noto Sans Telugu', kn: 'Noto Sans Kannada', ar: 'Noto Sans Arabic', he: 'Noto Sans Hebrew', th: 'Noto Sans Thai' };
-
-  function searchableFontFamily(language, text) {
-    if (/[\u0600-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/u.test(text)) return 'Noto Sans Arabic';
-    if (/[\u0590-\u05ff]/u.test(text)) return 'Noto Sans Hebrew';
-    if (/[\u0900-\u097f]/u.test(text)) return 'Noto Sans Devanagari';
-    if (/[\u0980-\u09ff]/u.test(text)) return 'Noto Sans Bengali';
-    if (/[\u0b80-\u0bff]/u.test(text)) return 'Noto Sans Tamil';
-    if (/[\u0c00-\u0c7f]/u.test(text)) return 'Noto Sans Telugu';
-    if (/[\u0c80-\u0cff]/u.test(text)) return 'Noto Sans Kannada';
-    if (/[\u0e00-\u0e7f]/u.test(text)) return 'Noto Sans Thai';
-    if (/[\u3040-\u30ff\u3400-\u9fff]/u.test(text)) return searchableFontFamilies[language] && /Noto Sans (?:JP|SC|TC|KR)/.test(searchableFontFamilies[language]) ? searchableFontFamilies[language] : 'Noto Sans JP';
-    return searchableFontFamilies[language] || 'Noto Sans';
-  }
+  const searchableFontFaces = new Map(), searchableFontFamily = window.TransformoSearchableFont.searchableFontFamily;
 
   function fontCoversCodePoint(face, codePoint) {
     return face.ranges.some(([start, end]) => codePoint >= start && codePoint <= end);
   }
 
-  async function getSearchableFontFaces(language) {
+  async function getSearchableFontFaces(language, text) {
     const family = searchableFontFamily(language, text);
     if (!searchableFontFaces.has(family)) searchableFontFaces.set(family, (async () => {
       const query = new URLSearchParams({ family: `${family}:wght@400`, display: 'swap' });
@@ -1035,7 +1021,7 @@
   async function drawSearchableText(page, pdf, fontkit, text, language, x, y, size, maxWidth, embeddedFonts) {
     if (!text?.trim()) return { embedded: 0, skipped: 0 };
     let faces;
-    try { faces = await getSearchableFontFaces(language); }
+    try { faces = await getSearchableFontFaces(language, text); }
     catch { return { embedded: 0, skipped: [...text].length }; }
     const runs = [];
     let current = null;

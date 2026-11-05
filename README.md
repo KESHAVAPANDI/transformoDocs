@@ -115,6 +115,7 @@ transformoDocs/
 ├── video.css           # Video editing controls
 ├── edit-history.js     # Shared bounded undo/redo snapshots for text editors
 ├── docx-text-mapping.js # Match rendered Word paragraphs to source document order
+├── searchable-font.js   # Choose Unicode font subsets from translated text scripts
 ├── tests/
 │   └── *.test.cjs        # Node built-in tests for editor/export helpers
 ├── app.js              # App navigation and task workflows
