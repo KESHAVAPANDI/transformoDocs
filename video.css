@@ -49,7 +49,7 @@
 .video-timeline{margin-top:12px;padding:10px 12px}
 .video-editor-status{font-size:9px}
 .subtitle-preview{position:absolute;z-index:2;bottom:12px;left:50%;transform:translateX(-50%);width:max-content;max-width:84%;padding:7px 12px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(9,10,15,.82);color:#fff;text-align:center;font-size:clamp(12px,1.8vw,20px);line-height:1.4;white-space:pre-wrap;pointer-events:none;box-shadow:0 5px 24px rgba(0,0,0,.35)}
-.subtitle-track-tools{display:flex;gap:7px;margin:0 0 8px}
+.subtitle-track-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0 0 8px}
 .subtitle-track-tools .secondary-button{flex:1;margin:0;min-height:31px;padding:0 8px}
 .caption-language-options{max-height:94px;overflow:auto;padding:1px 2px 4px;scrollbar-color:#484754 transparent}
 .caption-language-options button{flex:none}

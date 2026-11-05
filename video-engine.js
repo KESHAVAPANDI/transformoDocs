@@ -28,6 +28,12 @@
   function timelineOffset(index) { return clips.slice(0, index).reduce((sum, clip) => sum + Math.max(0, clip.end - clip.start), 0); }
   function timelineTime(index, sourceTime) { const clip = clips[index]; return clip ? timelineOffset(index) + Math.max(0, Math.min(clip.end - clip.start, sourceTime - clip.start)) : 0; }
   function subtitleAt(time) { return subtitles.find(cue => time >= cue.start && time < cue.end)?.text.trim() || ''; }
+  function invalidateExports() {
+    if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
+    if (subtitleUrl) URL.revokeObjectURL(subtitleUrl); subtitleUrl = null;
+    const workspace = root();
+    if (workspace) { const videoLink = workspace.querySelector('#download-video'), subtitleLink = workspace.querySelector('#download-subtitles'); if (videoLink) videoLink.hidden = true; if (subtitleLink) subtitleLink.hidden = true; }
+  }
   function updateSubtitlePreview(time = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || 0)) {
     const preview = root()?.querySelector('#subtitle-preview'); if (!preview) return;
     const value = subtitleAt(time); preview.textContent = value; preview.hidden = !value;
@@ -35,25 +41,65 @@
   function renderSubtitles() {
     const list = root()?.querySelector('#subtitle-cues'); if (!list) return;
     list.innerHTML = subtitles.length ? subtitles.map((cue, index) => `<article class="subtitle-cue" data-subtitle-index="${index}"><header><strong>Cue ${String(index + 1).padStart(2, '0')}</strong><button type="button" data-subtitle-remove aria-label="Remove subtitle cue ${index + 1}">×</button></header><div class="subtitle-cue-times"><label>Start <input type="number" min="0" step="0.1" data-subtitle-field="start" value="${cue.start.toFixed(1)}" /></label><label>End <input type="number" min="0" step="0.1" data-subtitle-field="end" value="${cue.end.toFixed(1)}" /></label></div><textarea rows="2" data-subtitle-field="text" aria-label="Subtitle cue ${index + 1} text" placeholder="Type a subtitle…">${escapeHtml(cue.text)}</textarea></article>`).join('') : '<div class="subtitle-empty">Add a cue to place a subtitle on the timeline.</div>';
+    const exportButton = root()?.querySelector('#export-srt'); if (exportButton) exportButton.disabled = !subtitles.some(cue => cue.text.trim());
     updateSubtitlePreview();
   }
   function addSubtitle() {
     const start = timelineTime(activeClip, root()?.querySelector('#source-video')?.currentTime || clips[activeClip]?.start || 0), end = Math.min(totalDuration(), start + 3);
     subtitles.push({ start, end: end > start ? end : start + 3, text: '' });
-    renderSubtitles(); root()?.querySelector(`[data-subtitle-index="${subtitles.length - 1}"] textarea`)?.focus();
+    invalidateExports(); renderSubtitles(); root()?.querySelector(`[data-subtitle-index="${subtitles.length - 1}"] textarea`)?.focus();
   }
   function updateSubtitle(event) {
     const field = event.target.closest('[data-subtitle-field]'), cue = field && subtitles[Number(field.closest('[data-subtitle-index]').dataset.subtitleIndex)]; if (!cue) return;
     cue[field.dataset.subtitleField] = field.dataset.subtitleField === 'text' ? field.value : Math.max(0, Number(field.value) || 0);
-    updateSubtitlePreview();
+    invalidateExports(); updateSubtitlePreview();
+    const exportButton = root()?.querySelector('#export-srt'); if (exportButton) exportButton.disabled = !subtitles.some(item => item.text.trim());
   }
   function removeSubtitle(event) {
     const button = event.target.closest('[data-subtitle-remove]'); if (!button) return;
-    subtitles.splice(Number(button.closest('[data-subtitle-index]').dataset.subtitleIndex), 1); renderSubtitles();
+    subtitles.splice(Number(button.closest('[data-subtitle-index]').dataset.subtitleIndex), 1); invalidateExports(); renderSubtitles();
   }
   function srtTimestamp(seconds) {
     const value = Math.max(0, Math.round(seconds * 1000)), hours = Math.floor(value / 3600000), minutes = Math.floor(value % 3600000 / 60000), secs = Math.floor(value % 60000 / 1000), millis = value % 1000;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
+  }
+  function parseSrtTimestamp(value) {
+    const match = String(value).match(/^(\d+):([0-5]\d):([0-5]\d)[,.](\d{1,3})$/);
+    if (!match) return null;
+    return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(match[4].padEnd(3, '0')) / 1000;
+  }
+  function parseSrt(source) {
+    const blocks = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split(/\n\s*\n+/), cues = []; let skipped = 0;
+    for (const block of blocks) {
+      const lines = block.split('\n'), timingIndex = lines.findIndex(line => /^\s*\d+:[0-5]\d:[0-5]\d[,.]\d{1,3}\s+-->\s+\d+:[0-5]\d:[0-5]\d[,.]\d{1,3}(?:\s+.*)?$/.test(line));
+      if (timingIndex < 0) { if (lines.some(line => line.trim())) skipped++; continue; }
+      const timing = lines[timingIndex].match(/^\s*(\d+:[0-5]\d:[0-5]\d[,.]\d{1,3})\s+-->\s+(\d+:[0-5]\d:[0-5]\d[,.]\d{1,3})/), start = parseSrtTimestamp(timing[1]), end = parseSrtTimestamp(timing[2]);
+      const text = lines.slice(timingIndex + 1).join('\n').replace(/\\N/g, '\n').replace(/\{\\(?:an\d+|b\d*|i\d*|u\d*)\}/gi, '').replace(/<[^>]*>/g, '').trim();
+      if (start === null || end === null || end <= start || !text) { skipped++; continue; }
+      cues.push({ start, end, text });
+    }
+    cues.sort((a, b) => a.start - b.start || a.end - b.end);
+    return { cues, skipped };
+  }
+  function subtitleSrt() {
+    const duration = totalDuration();
+    return subtitles.filter(cue => cue.text.trim() && cue.start < duration && Math.min(cue.end, duration) > cue.start).sort((a, b) => a.start - b.start).map((cue, index) => `${index + 1}\n${srtTimestamp(cue.start)} --> ${srtTimestamp(Math.min(cue.end, duration))}\n${cue.text.trim()}`).join('\n\n');
+  }
+  function downloadSrt() {
+    const srt = subtitleSrt();
+    if (!srt) { notify('Add subtitle text within the timeline before exporting SRT.'); return; }
+    const url = URL.createObjectURL(new Blob([srt], { type: 'text/plain;charset=utf-8' })), link = document.createElement('a');
+    link.href = url; link.download = `${safeBase(clips[0]?.file.name || 'transformo-video')}-subtitles.srt`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function importSrt(file) {
+    if (!file) return;
+    try {
+      const result = parseSrt(await file.text());
+      if (!result.cues.length) throw new Error('No valid subtitle cues were found. Use an SRT file with numbered cues and timecodes.');
+      subtitles = result.cues; invalidateExports(); renderSubtitles();
+      const outside = subtitles.filter(cue => cue.start >= totalDuration()).length;
+      notify(`Imported ${subtitles.length} subtitle cue${subtitles.length === 1 ? '' : 's'}${result.skipped ? ` · skipped ${result.skipped} invalid block${result.skipped === 1 ? '' : 's'}` : ''}${outside ? ` · ${outside} start beyond the timeline` : ''}.`);
+    } catch (error) { notify(error.message || 'Could not read that SRT file.'); }
   }
   async function addClips(files) {
     const candidates = [...files].filter(file => file.type.startsWith('video/') || /\.(mp4|mov|webm|mkv)$/i.test(file.name));
@@ -67,6 +113,7 @@
       } catch { clips.pop(); URL.revokeObjectURL(clip.url); notify(`Could not read ${file.name}. Try an MP4 or WebM file.`); }
     }
     if (clips.length) {
+      invalidateExports();
       activeClip = Math.min(activeClip, clips.length - 1);
       renderTimeline(); await showClip(activeClip); updateTotals();
     }
@@ -86,8 +133,8 @@
       <header class="video-editor-header"><div><div class="eyebrow"><span class="live-dot video-dot"></span> LOCAL VIDEO EDITOR</div><h2 id="video-editor-title">Your video timeline</h2><p>Arrange clips, set in and out points, then export one sequence.</p></div><button class="video-back-button" id="video-editor-close" type="button">← Back to projects</button></header>
       <div class="video-editor-grid"><div class="video-stage"><video id="source-video" controls playsinline></video><canvas id="render-canvas" width="1280" height="720" hidden></canvas><div id="subtitle-preview" class="subtitle-preview" hidden></div></div>
       <aside class="video-inspector"><div class="inspector-label">CLIP TRIM</div><div class="active-clip-name" id="active-clip-name">Select a timeline clip</div><div class="trim-fields"><label>In <input id="trim-start" type="number" min="0" step="0.1" value="0" /></label><label>Out <input id="trim-end" type="number" min="0" step="0.1" value="0" /></label></div>
-      <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-language" type="hidden" value="es" /><div class="caption-language-options" role="group" aria-label="Subtitle translation language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div id="subtitle-cues" class="subtitle-cues"></div>
-      <div class="inspector-note">Cues use seconds on the combined timeline. Export burns them into the video and can also download an SRT track.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">Add clips to start your edit.</div></aside></div>
+      <div class="inspector-label caption-label">SUBTITLE TRACK</div><div class="subtitle-track-tools"><button class="secondary-button" id="import-srt" type="button">Import SRT</button><input id="srt-input" type="file" accept=".srt,application/x-subrip,text/plain" hidden /><button class="secondary-button" id="export-srt" type="button" disabled>Export SRT</button><button class="secondary-button" id="add-subtitle" type="button">＋ Add cue</button><button class="secondary-button" id="translate-caption" type="button">Translate track</button></div><input id="caption-language" type="hidden" value="es" /><div class="caption-language-options" role="group" aria-label="Subtitle translation language"><button type="button" data-caption-language="es" aria-pressed="true">Español</button><button type="button" data-caption-language="fr" aria-pressed="false">Français</button><button type="button" data-caption-language="ja" aria-pressed="false">日本語</button><button type="button" data-caption-language="hi" aria-pressed="false">हिन्दी</button><button type="button" data-caption-language="ta" aria-pressed="false">தமிழ்</button><button type="button" data-caption-language="de" aria-pressed="false">Deutsch</button><button type="button" data-caption-language="zh" aria-pressed="false">中文</button><button type="button" data-caption-language="ko" aria-pressed="false">한국어</button><button type="button" data-caption-language="ar" aria-pressed="false">العربية</button></div><div id="subtitle-cues" class="subtitle-cues"></div>
+      <div class="inspector-note">SRT timestamps use seconds on the combined timeline. Cues outside the timeline are left out of export.</div><button class="primary-button" id="export-video" type="button">Export timeline <span>↗</span></button><a id="download-video" class="video-download" hidden>Download edited video ↓</a><a id="download-subtitles" class="video-download subtitle-download" hidden>Download subtitles (.srt) ↓</a><div id="video-editor-status" class="video-editor-status">Add clips to start your edit.</div></aside></div>
       <section class="timeline-panel" aria-label="Video timeline"><div class="timeline-heading"><div><strong>Timeline</strong><span id="timeline-summary">0 clips · 00:00</span></div><button class="secondary-button" id="video-add-clips" type="button">＋ Add clips</button><input id="timeline-input" type="file" accept="video/*" multiple hidden /></div><div class="timeline-ruler"><span>00:00</span><div><i></i><i></i><i></i><i></i><i></i></div><span id="timeline-duration">00:00</span></div><div class="timeline-clips" id="timeline-clips"></div></section>
       <div class="video-timeline"><span>◷</span><div class="timeline-rail"><div class="timeline-fill"></div></div><span id="video-current-time">00:00</span><span class="timeline-divider">/</span><span id="video-duration">00:00</span></div>
     </section>`;
@@ -108,6 +155,9 @@
     workspace.querySelector('#add-subtitle').addEventListener('click', addSubtitle);
     workspace.querySelector('#subtitle-cues').addEventListener('input', updateSubtitle);
     workspace.querySelector('#subtitle-cues').addEventListener('click', removeSubtitle);
+    workspace.querySelector('#import-srt').addEventListener('click', () => workspace.querySelector('#srt-input').click());
+    workspace.querySelector('#srt-input').addEventListener('change', async event => { await importSrt(event.target.files?.[0]); event.target.value = ''; });
+    workspace.querySelector('#export-srt').addEventListener('click', downloadSrt);
     workspace.querySelector('#translate-caption').addEventListener('click', translateCaption);
     workspace.querySelectorAll('[data-caption-language]').forEach(button => button.addEventListener('click', () => {
       workspace.querySelector('#caption-language').value = button.dataset.captionLanguage;
@@ -147,10 +197,10 @@
     const button = event.target.closest('[data-timeline-action]'), card = button?.closest('[data-clip-index]'); if (!button || !card) return;
     const index = Number(card.dataset.clipIndex), action = button.dataset.timelineAction;
     if (action === 'select') { showClip(index).catch(error => notify(error.message)); return; }
-    if (action === 'remove') { const selectedClip = clips[activeClip], [removed] = clips.splice(index, 1); URL.revokeObjectURL(removed.url); activeClip = clips.indexOf(selectedClip); if (activeClip < 0) activeClip = Math.max(0, Math.min(index, clips.length - 1)); renderTimeline(); if (clips.length) showClip(activeClip).catch(error => notify(error.message)); else { const video = root()?.querySelector('#source-video'), label = root()?.querySelector('#active-clip-name'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } if (label) label.textContent = 'Select a timeline clip'; } return; }
+    if (action === 'remove') { invalidateExports(); const selectedClip = clips[activeClip], [removed] = clips.splice(index, 1); URL.revokeObjectURL(removed.url); activeClip = clips.indexOf(selectedClip); if (activeClip < 0) activeClip = Math.max(0, Math.min(index, clips.length - 1)); renderTimeline(); if (clips.length) showClip(activeClip).catch(error => notify(error.message)); else { const video = root()?.querySelector('#source-video'), label = root()?.querySelector('#active-clip-name'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } if (label) label.textContent = 'Select a timeline clip'; } return; }
     const next = action === 'up' ? index - 1 : index + 1;
     if (next < 0 || next >= clips.length) return;
-    [clips[index], clips[next]] = [clips[next], clips[index]];
+    invalidateExports(); [clips[index], clips[next]] = [clips[next], clips[index]];
     if (activeClip === index) activeClip = next; else if (activeClip === next) activeClip = index;
     renderTimeline(); showClip(activeClip).catch(error => notify(error.message));
   }
@@ -158,7 +208,7 @@
     const clip = clips[activeClip], workspace = root(); if (!clip || !workspace) return;
     const start = Math.max(0, Math.min(clip.duration, Number(workspace.querySelector('#trim-start').value) || 0));
     const end = Math.max(0, Math.min(clip.duration, Number(workspace.querySelector('#trim-end').value) || clip.duration));
-    clip.start = start; clip.end = end;
+    invalidateExports(); clip.start = start; clip.end = end;
     workspace.querySelector('#trim-start').value = start.toFixed(1); workspace.querySelector('#trim-end').value = end.toFixed(1);
     if (end > start) workspace.querySelector('#source-video').currentTime = start;
     renderTimeline();
@@ -186,7 +236,7 @@
       const translator = await Translator.create({ sourceLanguage: 'en', targetLanguage });
       try { for (let index = 0; index < cues.length; index++) { button.textContent = `Translating ${index + 1}/${cues.length}…`; cues[index].text = await translator.translate(cues[index].text); } }
       finally { translator.destroy?.(); }
-      renderSubtitles(); notify('Translated subtitle track is ready to review.');
+      invalidateExports(); renderSubtitles(); notify('Translated subtitle track is ready to review.');
     } catch (error) { notify(error.message || 'Translation could not start.'); }
     finally { button.disabled = false; button.textContent = 'Translate track'; }
   }
@@ -256,7 +306,7 @@
       const blob = await finished; if (graph) stream.getVideoTracks().forEach(track => track.stop()); else stream.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1;
       if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = URL.createObjectURL(blob);
       const link = workspace.querySelector('#download-video'); link.href = exportUrl; link.download = `${safeBase(exportClips[0].file.name)}-transformo.webm`; link.hidden = false;
-      const srt = subtitles.filter(cue => cue.text.trim() && cue.start < totalDuration() && Math.min(cue.end, totalDuration()) > cue.start).sort((a, b) => a.start - b.start).map((cue, index) => `${index + 1}\n${srtTimestamp(cue.start)} --> ${srtTimestamp(Math.min(cue.end, totalDuration()))}\n${cue.text.trim()}`).join('\n\n');
+      const srt = subtitleSrt();
       if (srt) { subtitleUrl = URL.createObjectURL(new Blob([srt], { type: 'text/plain;charset=utf-8' })); subtitleLink.href = subtitleUrl; subtitleLink.download = `${safeBase(exportClips[0].file.name)}-subtitles.srt`; subtitleLink.hidden = false; }
       const duration = exportClips.reduce((sum, clip) => sum + clip.end - clip.start, 0);
       status.textContent = `Export ready · ${format(duration)} · ${(blob.size / 1048576).toFixed(1)} MB`; notify('Your edited video timeline is ready to download.');
@@ -264,5 +314,5 @@
       if (recorder?.state !== 'inactive') recorder?.stop(); if (graph) stream?.getVideoTracks().forEach(track => track.stop()); else stream?.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1; status.textContent = error.message || 'Video export failed.'; notify(status.textContent);
     } finally { button.disabled = false; updateTotals(); }
   }
-  window.TransformoVideoEditor = { open: editor };
+  window.TransformoVideoEditor = { open: editor, addClips, importSubtitles: importSrt, hasWorkspace: () => !!root()?.querySelector('#video-editor') };
 })();
