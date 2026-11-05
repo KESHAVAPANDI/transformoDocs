@@ -313,22 +313,17 @@
     if (!history) return;
     if (history.timer) clearTimeout(history.timer);
     history.timer = null;
-    const snapshot = readDocxEditSnapshot(container), previous = history.snapshots[history.index];
-    if (previous && previous.length === snapshot.length && previous.every((value, index) => value === snapshot[index])) return;
-    history.snapshots = history.snapshots.slice(0, history.index + 1);
-    history.snapshots.push(snapshot);
-    if (history.snapshots.length > 40) history.snapshots.shift();
-    history.index = history.snapshots.length - 1;
+    history.history.record(readDocxEditSnapshot(container));
   }
 
   function moveDocxEditHistory(container, direction) {
     const history = container.__transformoDocxHistory;
     if (!history) return false;
-    pushDocxEditSnapshot(container);
-    const next = history.index + direction;
-    if (next < 0 || next >= history.snapshots.length) return false;
-    history.index = next;
-    [...container.querySelectorAll('.docx-editing-block')].forEach((overlay, index) => { overlay.textContent = history.snapshots[next][index] || ''; });
+    if (history.timer) clearTimeout(history.timer);
+    history.timer = null;
+    const current = readDocxEditSnapshot(container), snapshot = direction < 0 ? history.history.undo(current) : history.history.redo(current);
+    if (!snapshot) return false;
+    [...container.querySelectorAll('.docx-editing-block')].forEach((overlay, index) => { overlay.textContent = snapshot[index] || ''; });
     container.__transformoReportDocxEdit?.();
     return true;
   }
@@ -364,7 +359,7 @@
       overlay.dataset.originalText = block.text; overlay.dataset.baseFontSize = String(block.fontSize); overlay.dataset.baseLineHeight = String(block.lineHeight); overlay.dataset.originalHeight = String(block.height);
       block.element.classList.add('docx-editing-masked'); layers.get(block.page).append(overlay);
     });
-    container.__transformoDocxHistory = { snapshots: [readDocxEditSnapshot(container)], index: 0, timer: null };
+    container.__transformoDocxHistory = { history: TransformoEditHistory.createEditHistory(readDocxEditSnapshot(container)), timer: null };
     const report = () => {
       for (const overlay of container.querySelectorAll('.docx-editing-block')) {
         let size = Number(overlay.dataset.baseFontSize), lineHeight = Number(overlay.dataset.baseLineHeight), maxHeight = Number(overlay.dataset.originalHeight);
@@ -374,9 +369,9 @@
       }
       const overflowBlocks = container.querySelectorAll('.docx-editing-block.docx-edit-overflow').length;
       const modifiedBlocks = [...container.querySelectorAll('.docx-editing-block')].filter(overlay => overlay.textContent !== overlay.dataset.originalText).length;
-      const history = container.__transformoDocxHistory, current = readDocxEditSnapshot(container), saved = history?.snapshots[history.index];
+      const history = container.__transformoDocxHistory?.history, current = readDocxEditSnapshot(container), saved = history?.current;
       const pendingEdit = !!saved && (saved.length !== current.length || saved.some((value, index) => value !== current[index]));
-      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length, modifiedBlocks, canUndo: !!history && (history.index > 0 || pendingEdit), canRedo: !!history && history.index < history.snapshots.length - 1 } }));
+      container.dispatchEvent(new CustomEvent('transformo:docx-edit-change', { detail: { overflowBlocks, totalBlocks: blocks.length, modifiedBlocks, canUndo: !!history && (history.canUndo || pendingEdit), canRedo: !!history && history.canRedo && !pendingEdit } }));
     };
     container.__transformoReportDocxEdit = report;
     container.__transformoUndoDocxEdit = () => moveDocxEditHistory(container, -1);
