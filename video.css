@@ -88,3 +88,8 @@
 .subtitle-download{color:#d0c4ff}
 @media(max-width:760px){.video-editor-grid{grid-template-columns:1fr;gap:8px}.video-stage{min-height:190px}.video-stage video{max-height:42vh}.video-inspector{display:grid;grid-template-columns:1fr 1fr;gap:8px}.video-inspector .inspector-label,.video-inspector .caption-label,.video-inspector textarea,.caption-translate,.subtitle-track-tools,.caption-language-options,.caption-translation-modes,.caption-cloud-consent,.subtitle-cues,.inspector-note,.video-inspector .primary-button,.video-editor-status,.video-download{grid-column:1/-1}.trim-fields{margin:0}.video-editor-header{align-items:flex-start;flex-wrap:wrap;gap:12px}.video-project-header-actions{width:100%;flex-wrap:wrap}.video-project-name-field{flex:1;min-width:140px}.video-back-button{white-space:nowrap}.timeline-panel{padding:11px}.timeline-clip-actions{gap:2px}.timeline-clip-actions button{width:23px;height:23px}}
 @media(prefers-reduced-motion:reduce){.video-editor{animation:none}.timeline-clip{transition:none}}
+.transition-label{margin-top:15px}
+.video-transition-options{display:grid;grid-template-columns:1fr 1.25fr;gap:6px;margin:0 0 10px}
+.video-transition-options button{min-height:31px;padding:5px 7px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(255,255,255,.03);color:#aeb0bb;font:8px var(--font);transition:background .18s,border-color .18s,color .18s}
+.video-transition-options button:hover{border-color:rgba(169,151,255,.32);color:#eee}
+.video-transition-options button.selected{border-color:rgba(169,151,255,.38);background:rgba(169,151,255,.12);color:#e6deff}
