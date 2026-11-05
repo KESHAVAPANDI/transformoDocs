@@ -187,6 +187,17 @@
 @keyframes translation-pulse{50%{opacity:.45;transform:scale(.8)}}
 @media(prefers-reduced-motion:reduce){.translation-status,.translation-status i{animation:none;transition:none}}
 
+.document-page-comparison{grid-template-columns:minmax(0,1fr);gap:12px}
+.compare-page-pair{min-width:0;padding:10px;border:1px solid rgba(255,255,255,.09);border-radius:13px;background:linear-gradient(150deg,rgba(255,255,255,.05),rgba(255,255,255,.018));box-shadow:0 10px 30px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.05);animation:page-in .28s ease both}
+.compare-page-heading{padding:1px 2px 9px;color:#bdb8d5;font-size:8px;font-weight:700;letter-spacing:.8px}
+.compare-page-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.compare-page-side{min-width:0;margin:0;padding:8px;border:1px solid rgba(255,255,255,.075);border-radius:9px;background:rgba(12,13,18,.38)}
+.compare-page-side figcaption{padding:1px 1px 7px;color:#a7a8b3;font-size:8px;font-weight:600}
+.compare-page-side:last-child figcaption{color:#a9ddc8}
+.compare-page-side img{display:block;width:100%;height:auto;max-height:760px;object-fit:contain;border-radius:5px;background:#e9e8e5}
+@media(max-width:700px){.document-page-comparison{grid-template-columns:minmax(0,1fr)}.compare-page-sides{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.compare-page-pair{animation:none}}
+
 .file-drop-overlay{position:fixed;z-index:1000;inset:12px;display:grid;place-items:center;overflow:hidden;border:1px dashed rgba(196,181,255,.58);border-radius:24px;background:rgba(13,15,21,.52);backdrop-filter:blur(9px) saturate(125%);-webkit-backdrop-filter:blur(9px) saturate(125%);pointer-events:none;animation:drop-overlay-in .2s ease-out both}
 .file-drop-overlay[hidden]{display:none!important}
 .file-drop-overlay:before{position:absolute;inset:0;content:"";background:radial-gradient(ellipse at 50% 46%,rgba(160,140,239,.13),transparent 46%),linear-gradient(135deg,rgba(154,226,199,.035),transparent 44%,rgba(173,155,246,.055));pointer-events:none}

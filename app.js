@@ -249,9 +249,17 @@ async function renderVisualPdfEditor(file){
   if(needsOcr)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
 }
 function drawTranslationPreview(mode){
-  const root=$('#translation-page-view'),preview=translationPreviews[mode];if(!root||!preview)return;
-  root.innerHTML=preview.pages.map(page=>`<figure class="document-page-card"><img src="${page.url}" alt="${mode==='source'?'Original':'Translated'} document page ${page.number}" loading="lazy" /><figcaption><span>PAGE ${String(page.number).padStart(2,'0')}</span><span>${mode==='source'?'Original':'Translated'}</span></figcaption></figure>`).join('')+(preview.total>preview.pages.length?`<div class="preview-limit-note">Previewing the first ${preview.pages.length} of ${preview.total} pages. The full document is included in translation.</div>`:'');
-  $$('.document-preview-tab').forEach(button=>button.classList.toggle('active',button.dataset.documentPreview===mode));
+  const root=$('#translation-page-view');if(!root)return;
+  root.classList.toggle('document-page-comparison',mode==='compare');
+  if(mode==='compare'){
+    const source=translationPreviews.source,translated=translationPreviews.translated;if(!source||!translated)return;
+    const pageCount=Math.min(source.pages.length,translated.pages.length);
+    root.innerHTML=source.pages.slice(0,pageCount).map((page,index)=>{const translatedPage=translated.pages[index];return`<section class="compare-page-pair"><div class="compare-page-heading">PAGE ${String(page.number).padStart(2,'0')}</div><div class="compare-page-sides"><figure class="compare-page-side"><figcaption>Original</figcaption><img src="${page.url}" alt="Original document page ${page.number}" loading="lazy" /></figure><figure class="compare-page-side"><figcaption>Translated</figcaption><img src="${translatedPage.url}" alt="Translated document page ${translatedPage.number}" loading="lazy" /></figure></div></section>`}).join('')+(Math.max(source.total,translated.total)>pageCount?`<div class="preview-limit-note">Comparing the first ${pageCount} pages. The full document is included in the translated PDF.</div>`:'');
+  }else{
+    const preview=translationPreviews[mode];if(!preview)return;
+    root.innerHTML=preview.pages.map(page=>`<figure class="document-page-card"><img src="${page.url}" alt="${mode==='source'?'Original':'Translated'} document page ${page.number}" loading="lazy" /><figcaption><span>PAGE ${String(page.number).padStart(2,'0')}</span><span>${mode==='source'?'Original':'Translated'}</span></figcaption></figure>`).join('')+(preview.total>preview.pages.length?`<div class="preview-limit-note">Previewing the first ${preview.pages.length} of ${preview.total} pages. The full document is included in translation.</div>`:'');
+  }
+  $$('.document-preview-tab[data-document-preview]').forEach(button=>{const selected=button.dataset.documentPreview===mode;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))});
 }
 async function renderTranslationPreview(file){
   const root=$('#line-editor');if(!root)return;root.hidden=false;root.innerHTML='<div class="document-preview-loading"><span class="preview-spinner"></span><span>Preparing full-page document preview…</span></div>';
@@ -261,8 +269,8 @@ async function renderTranslationPreview(file){
   translationPreviews[mode]={total:preview.total,pages:preview.pages.map(page=>{const url=URL.createObjectURL(page.blob);previewUrls.push(url);return{number:page.number,url}})};
   const hasScannedPages=taskPages.some(page=>!page.lines.length),ocr=hasScannedPages?ocrPanel():'';
   const overflow=translatedDocument?.overflowLines?`<div class="position-note position-note-warning">${translatedDocument.overflowLines} translated text area${translatedDocument.overflowLines===1?' may':'s may'} overflow its original page region. Check the translated preview before downloading.</div>`:'';
-  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs"><button type="button" class="document-preview-tab active" data-document-preview="source">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" ${translatedDocument?'':'disabled'}>Translated</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
-  root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{if(translationPreviews[button.dataset.documentPreview])drawTranslationPreview(button.dataset.documentPreview)}));
+  root.innerHTML=`<div class="document-preview-heading"><div><strong>${preview.total} page${preview.total===1?'':'s'} · full document</strong><span>Review the document as pages, not extracted text.</span></div><div class="document-preview-tabs" role="group" aria-label="Document comparison view"><button type="button" class="document-preview-tab active" data-document-preview="source" aria-pressed="${!translatedDocument}">Original</button><button type="button" class="document-preview-tab" data-document-preview="translated" aria-pressed="false" ${translatedDocument?'':'disabled'}>Translated</button><button type="button" class="document-preview-tab" data-document-preview="compare" aria-pressed="false" ${translatedDocument?'':'disabled'}>Compare</button></div></div>${ocr}${overflow}<div class="document-page-grid" id="translation-page-view"></div>`;
+  root.querySelectorAll('[data-document-preview]').forEach(button=>button.addEventListener('click',()=>{const mode=button.dataset.documentPreview;if(mode==='compare'?translationPreviews.source&&translationPreviews.translated:translationPreviews[mode])drawTranslationPreview(mode)}));
   if(hasScannedPages)root.querySelector('#run-ocr').addEventListener('click',runOcrOnCurrentPdf);
   drawTranslationPreview(translatedDocument?'translated':'source');
 }
@@ -273,6 +281,7 @@ function discardTranslationResult(){
   if(docxTranslationHost){DocumentEngine.clearDocxTranslation(docxTranslationHost);DocumentEngine.setDocxTranslationMode(docxTranslationHost,'original')}
   const docxTab=$('[data-docx-preview="translated"]');if(docxTab)docxTab.disabled=true;
   const tab=$('[data-document-preview="translated"]');if(tab)tab.disabled=true;
+  const compareTab=$('[data-document-preview="compare"]');if(compareTab)compareTab.disabled=true;
   if(translationPreviews.source)drawTranslationPreview('source');
   updateTaskCta();
 }
