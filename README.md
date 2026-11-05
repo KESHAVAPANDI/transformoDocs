@@ -52,7 +52,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 
 ## 🚀 Getting started
 
-Transformo is a static web app: no package manager or build step is required for its local workflows. The app loads PDF.js, pdf-lib, JSZip, docx-preview, html2canvas, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional on-device Translator API can run:
+Transformo is a static web app: no package manager or build step is required for its local workflows. The app loads PDF.js, pdf-lib, Fontkit, JSZip, docx-preview, html2canvas, and Tesseract.js from public CDNs. Start it from a local web server so browser file APIs, OCR workers, and the optional on-device Translator API can run:
 
 ```bash
 git clone https://github.com/KESHAVAPANDI/transformoDocs.git
@@ -124,7 +124,7 @@ transformoDocs/
 
 PDF merge, visual page selection, page organization, watermarks, page numbers, image/text conversion, PDF-to-text/PNG/JPG export, positioned block editing/translation, OCR for image-only PDF pages, and multi-clip video timeline export are implemented in the browser. OCR language data is downloaded on demand and recognition runs locally. There are deliberate limits:
 
-- PDF editing and translation exports are image-backed to retain page appearance and Unicode text. DOCX editing can export a native `.docx` by matching edited body paragraphs back to their original text; text is replaced inside the original paragraph structure and the first run's styling is reused where possible. Unmatched paragraphs stay unchanged and are counted in the completion message. DOCX-to-PDF and DOCX-to-image conversions use browser-rendered pages, so results can differ from Microsoft Word's layout.
+- PDF editing and translation exports keep a rendered page as the visible layer and add an invisible, embedded Unicode text layer for search and copy. Script-specific font subsets load from Google Fonts on demand; if a subset is unavailable, the image-backed PDF still exports and reports text characters that could not be indexed. OCR text remains approximate and should be reviewed. DOCX editing can export a native `.docx` by matching edited body paragraphs back to their original text; text is replaced inside the original paragraph structure and the first run's styling is reused where possible. Unmatched paragraphs stay unchanged and are counted in the completion message. DOCX-to-PDF and DOCX-to-image conversions use browser-rendered pages, so results can differ from Microsoft Word's layout.
 - Page organizing previews up to 80 pages at a time. Pages beyond the preview remain in their original order after the visible pages.
 - Page selection for splitting previews up to 80 pages. Enter a page range to extract later pages.
 - Translation previews show up to 24 pages at a time; every page is included in the exported PDF. The in-page editor previews up to 80 pages.
@@ -135,7 +135,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
 - Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the same local-first, consent-based DeepL option as document translation and translates from English. Transitions and MP4 export are not implemented yet.
 - DOCX editing and DOCX-to-PDF use a browser-rendered page preview. Editing overlays paragraphs at their source page positions and offers native Word output, but longer edits can reflow when opened in Word; first-run character styling is best effort. The PDF export is image-backed and not searchable or selectable. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. DOCX paragraph editing is supported, while native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
-- Files and saved video projects are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Video projects refer to source clips in the local workspace, and Transformo prevents removing a clip while a saved project still uses it. Save changes manually; unsaved edits trigger a leave/reload warning. Static PDF/OCR libraries and OCR language data are fetched from CDNs.
+- Files and saved video projects are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Video projects refer to source clips in the local workspace, and Transformo prevents removing a clip while a saved project still uses it. Save changes manually; unsaved edits trigger a leave/reload warning. Static PDF/OCR libraries, OCR language data, and Noto font subsets are fetched from CDNs. Font requests identify the requested font family, not the document text.
 
 ## 💡 More ideas worth exploring
 
@@ -153,6 +153,8 @@ Ideas, accessibility feedback, and thoughtful improvements are welcome. Open an 
 ## 📄 License
 
 This project is released under the MIT License. See [LICENSE](LICENSE).
+
+Transformo fetches Noto font subsets for Unicode PDF text layers from [Google Fonts](https://github.com/google/fonts). Noto font families are distributed under the [SIL Open Font License 1.1](https://github.com/google/fonts/blob/main/ofl/notosans/OFL.txt).
 
 <div align="center">
 <br />

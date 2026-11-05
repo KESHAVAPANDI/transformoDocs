@@ -353,7 +353,9 @@ async function translateCurrentLines(){
     await renderTranslationPreview(translatedDocument.blob);
     const tab=$('[data-document-preview="translated"]');if(tab){tab.disabled=false;tab.click()}
     button.innerHTML='Download translated PDF <span>↗</span>';
-    toast(translatedDocument.overflowLines?`Translation ready · ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?' may':'s may'} overflow. Review the page preview.`:'Translated document ready · review the page preview before downloading.');
+    const textLayerNote=translatedDocument.searchableCharacters?`${translatedDocument.searchableCharacters} characters are searchable.`:'The visual PDF is ready; searchable text could not be added.';
+    const skippedTextNote=translatedDocument.skippedSearchableCharacters?` ${translatedDocument.skippedSearchableCharacters} characters could not be indexed.`:'';
+    toast(translatedDocument.overflowLines?`Translation ready · ${translatedDocument.overflowLines} text area${translatedDocument.overflowLines===1?' may':'s may'} overflow. ${textLayerNote}${skippedTextNote} Review the page preview.`:`Translated document ready · ${textLayerNote}${skippedTextNote} Review the page preview before downloading.`);
   }catch(error){toast(error.message||'The document could not be translated.')}finally{button.disabled=false;if(!translatedDocument)button.innerHTML='Translate document <span>↗</span>'}
 }
 async function performCurrentTask(){

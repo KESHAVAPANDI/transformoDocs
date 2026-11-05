@@ -861,11 +861,85 @@
     return overflow;
   }
 
+  const searchableFontFaces = new Map();
+  const searchableFontFamilies = { ja: 'Noto Sans JP', zh: 'Noto Sans SC', 'zh-Hant': 'Noto Sans TC', ko: 'Noto Sans KR', hi: 'Noto Sans Devanagari', mr: 'Noto Sans Devanagari', bn: 'Noto Sans Bengali', ta: 'Noto Sans Tamil', te: 'Noto Sans Telugu', kn: 'Noto Sans Kannada', ar: 'Noto Sans Arabic', he: 'Noto Sans Hebrew', th: 'Noto Sans Thai' };
+
+  function searchableFontFamily(language, text) {
+    if (/[\u0600-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/u.test(text)) return 'Noto Sans Arabic';
+    if (/[\u0590-\u05ff]/u.test(text)) return 'Noto Sans Hebrew';
+    if (/[\u0900-\u097f]/u.test(text)) return 'Noto Sans Devanagari';
+    if (/[\u0980-\u09ff]/u.test(text)) return 'Noto Sans Bengali';
+    if (/[\u0b80-\u0bff]/u.test(text)) return 'Noto Sans Tamil';
+    if (/[\u0c00-\u0c7f]/u.test(text)) return 'Noto Sans Telugu';
+    if (/[\u0c80-\u0cff]/u.test(text)) return 'Noto Sans Kannada';
+    if (/[\u0e00-\u0e7f]/u.test(text)) return 'Noto Sans Thai';
+    if (/[\u3040-\u30ff\u3400-\u9fff]/u.test(text)) return searchableFontFamilies[language] && /Noto Sans (?:JP|SC|TC|KR)/.test(searchableFontFamilies[language]) ? searchableFontFamilies[language] : 'Noto Sans JP';
+    return searchableFontFamilies[language] || 'Noto Sans';
+  }
+
+  function fontCoversCodePoint(face, codePoint) {
+    return face.ranges.some(([start, end]) => codePoint >= start && codePoint <= end);
+  }
+
+  async function getSearchableFontFaces(language) {
+    const family = searchableFontFamily(language, text);
+    if (!searchableFontFaces.has(family)) searchableFontFaces.set(family, (async () => {
+      const query = new URLSearchParams({ family: `${family}:wght@400`, display: 'swap' });
+      const response = await fetch(`https://fonts.googleapis.com/css2?${query}`);
+      if (!response.ok) throw new Error('The Unicode font service is unavailable.');
+      const css = await response.text(), faces = [];
+      for (const match of css.matchAll(/@font-face\s*\{([^}]+)\}/g)) {
+        const body = match[1], src = body.match(/src:\s*url\(([^)]+)\)\s*format\(['"]woff2['"]\)/i), ranges = body.match(/unicode-range:\s*([^;]+);/i);
+        if (!src || !ranges) continue;
+        const codeRanges = [...ranges[1].matchAll(/U\+([\da-f?]+)(?:-([\da-f?]+))?/gi)].map(([, first, last]) => {
+          const start = parseInt(first.replace(/\?/g, '0'), 16), end = parseInt((last || first).replace(/\?/g, 'f'), 16);
+          return [start, end];
+        });
+        faces.push({ url: src[1].replace(/["']/g, ''), ranges: codeRanges });
+      }
+      if (!faces.length) throw new Error('No embeddable Unicode font subsets were returned.');
+      return faces;
+    })());
+    return searchableFontFaces.get(family);
+  }
+
+  async function drawSearchableText(page, pdf, fontkit, text, language, x, y, size, maxWidth, embeddedFonts) {
+    if (!text?.trim()) return { embedded: 0, skipped: 0 };
+    let faces;
+    try { faces = await getSearchableFontFaces(language); }
+    catch { return { embedded: 0, skipped: [...text].length }; }
+    const runs = [];
+    let current = null;
+    for (const character of text) {
+      const codePoint = character.codePointAt(0), face = faces.find(candidate => fontCoversCodePoint(candidate, codePoint));
+      if (!face) { current = null; continue; }
+      if (!current || current.face.url !== face.url) { current = { face, text: '' }; runs.push(current); }
+      current.text += character;
+    }
+    let cursorX = x, embedded = 0, skipped = 0;
+    for (const run of runs) {
+      try {
+        if (!embeddedFonts.has(run.face.url)) {
+          if (!fontkit?.create) throw new Error('Fontkit is unavailable.');
+          pdf.registerFontkit(fontkit);
+          const response = await fetch(run.face.url);
+          if (!response.ok) throw new Error('Could not download a font subset.');
+          embeddedFonts.set(run.face.url, await pdf.embedFont(await response.arrayBuffer(), { subset: true }));
+        }
+        const font = embeddedFonts.get(run.face.url), runWidth = font.widthOfTextAtSize(run.text, size);
+        page.drawText(run.text, { x: cursorX, y, size, font, color: rgb(0, 0, 0), opacity: 0, maxWidth: Math.max(size, Math.min(maxWidth, runWidth + size)) });
+        cursorX += runWidth; embedded += [...run.text].length;
+      } catch { skipped += [...run.text].length; }
+    }
+    return { embedded, skipped: [...text].length - embedded };
+  }
+
   async function exportPositionedPdf(file, pages, onProgress = () => {}, returnBlob = false, language = 'en') {
     requireLibraries('PDFLib');
     if (!pdfjs) throw new Error('The PDF renderer did not load.');
     const source = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise, output = await PDFDocument.create();
-    let overflowLines = 0;
+    let overflowLines = 0, searchableCharacters = 0, skippedSearchableCharacters = 0;
+    const embeddedFonts = new Map(), fontkit = window.fontkit;
     for (let index = 0; index < source.numPages; index++) {
       const page = await source.getPage(index + 1), viewport = page.getViewport({ scale: 2 });
       const canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
@@ -897,10 +971,24 @@
       const image = await output.embedPng(await (await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))).arrayBuffer());
       const newPage = output.addPage([viewport.width / viewport.scale, viewport.height / viewport.scale]);
       newPage.drawImage(image, { x: 0, y: 0, width: newPage.getWidth(), height: newPage.getHeight() });
+      const searchableBlocks = new Set();
+      for (const line of lines) {
+        if (line.translationBlockId && searchableBlocks.has(line.translationBlockId)) continue;
+        if (line.translationBlockId) searchableBlocks.add(line.translationBlockId);
+        const blockLines = line.translationBlockId ? lines.filter(candidate => candidate.translationBlockId === line.translationBlockId) : [line];
+        const value = line.translationBlockId ? line.translationText || line.edited || line.text : (line.edited ?? line.text).trim();
+        if (!value) continue;
+        const points = blockLines.flatMap(candidate => [[candidate.x, candidate.y], [candidate.x + candidate.width, candidate.y - candidate.height]]).map(point => viewport.convertToViewportPoint(...point));
+        const x = Math.max(0, Math.min(...points.map(point => point[0])) / viewport.scale), top = Math.max(0, Math.min(...points.map(point => point[1])) / viewport.scale);
+        const width = Math.max(8, (Math.max(...points.map(point => point[0])) - Math.min(...points.map(point => point[0]))) / viewport.scale);
+        const y = newPage.getHeight() - top - Math.max(4, line.size * .18), fontSize = Math.max(4, Math.min(72, line.size * .78));
+        const indexed = await drawSearchableText(newPage, output, fontkit, value, language, x, y, fontSize, width, embeddedFonts);
+        searchableCharacters += indexed.embedded; skippedSearchableCharacters += indexed.skipped;
+      }
       onProgress(index + 1, source.numPages);
     }
     const blob = bytesToBlob(await output.save());
-    if (returnBlob) return { blob, overflowLines, filename: `${safeBase(file.name)}-translated.pdf` };
+    if (returnBlob) return { blob, overflowLines, searchableCharacters, skippedSearchableCharacters, filename: `${safeBase(file.name)}-translated.pdf` };
     download(blob, `${safeBase(file.name)}-transformed.pdf`);
     return overflowLines;
   }
