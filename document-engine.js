@@ -510,6 +510,28 @@
     return `Created a visual PDF from ${pages.length} Word page${pages.length === 1 ? '' : 's'}. Page appearance is preserved as images; text is not searchable.`;
   }
 
+  async function docxToImages(file, container, format = 'png', onProgress = () => {}) {
+    requireLibraries('docx', 'JSZip', 'html2canvas');
+    if (!file?.name?.toLowerCase().endsWith('.docx')) throw new Error('Choose a Word .docx file.');
+    if (!['png', 'jpg'].includes(format)) throw new Error('Choose PNG or JPG output.');
+    if (!container || container.__transformoSourceFile !== file) await renderDocxPreview(file, container);
+    const pages = [...container.querySelectorAll('section.docx')];
+    if (!pages.length) throw new Error('The Word page preview is empty. Choose the file again.');
+    const zip = new JSZip(), restoreHost = expandDocxPreviewHost(container), mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png', quality = format === 'jpg' ? .92 : undefined;
+    onProgress(0, pages.length);
+    try {
+      for (const [index, page] of pages.entries()) {
+        const canvas = await window.html2canvas(page, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, quality));
+        if (!imageBlob) throw new Error(`Word page ${index + 1} could not be captured as ${format.toUpperCase()}.`);
+        zip.file(`page-${String(index + 1).padStart(3, '0')}.${format}`, imageBlob);
+        canvas.width = 1; canvas.height = 1; onProgress(index + 1, pages.length);
+      }
+    } finally { restoreHost(); }
+    download(await zip.generateAsync({ type: 'blob' }), `${safeBase(file.name)}-${format}-pages.zip`);
+    return `Exported ${pages.length} Word page${pages.length === 1 ? '' : 's'} as ${format.toUpperCase()} images in a ZIP. Images follow the browser-rendered page preview.`;
+  }
+
   async function pptxToText(input) {
     requireLibraries('JSZip');
     const files = Array.isArray(input) ? input : [input], documents = [], presentationNs = 'http://schemas.openxmlformats.org/presentationml/2006/main', drawingNs = 'http://schemas.openxmlformats.org/drawingml/2006/main', relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -883,5 +905,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
