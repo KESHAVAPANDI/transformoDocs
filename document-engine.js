@@ -1054,6 +1054,7 @@
     if (!pdfjs) throw new Error('The PDF renderer did not load.');
     const source = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise, output = await PDFDocument.create();
     let overflowLines = 0, searchableCharacters = 0, skippedSearchableCharacters = 0;
+    const overflowDetails = [];
     const embeddedFonts = new Map(), fontkit = window.fontkit;
     for (let index = 0; index < source.numPages; index++) {
       const page = await source.getPage(index + 1), viewport = page.getViewport({ scale: 2 });
@@ -1067,7 +1068,11 @@
           if (renderedBlocks.has(line.translationBlockId)) continue;
           renderedBlocks.add(line.translationBlockId);
           const blockLines = lines.filter(candidate => candidate.translationBlockId === line.translationBlockId);
-          if (drawTranslatedBlock(ctx, blockLines, line.translationText || line.edited || line.text, viewport, language)) overflowLines++;
+          const translatedText = line.translationText || line.edited || line.text;
+          if (drawTranslatedBlock(ctx, blockLines, translatedText, viewport, language)) {
+            overflowLines++;
+            overflowDetails.push({ page: index + 1, text: String(translatedText).replace(/\s+/g, ' ').trim().slice(0, 120) });
+          }
           continue;
         }
         const value = (line.edited ?? line.text).trim(); if (!value) continue;
@@ -1103,7 +1108,7 @@
       onProgress(index + 1, source.numPages);
     }
     const blob = bytesToBlob(await output.save());
-    if (returnBlob) return { blob, overflowLines, searchableCharacters, skippedSearchableCharacters, filename: `${safeBase(file.name)}-translated.pdf` };
+    if (returnBlob) return { blob, overflowLines, overflowDetails, searchableCharacters, skippedSearchableCharacters, filename: `${safeBase(file.name)}-translated.pdf` };
     download(blob, `${safeBase(file.name)}-transformed.pdf`);
     return overflowLines;
   }
