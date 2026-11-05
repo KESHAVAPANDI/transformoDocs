@@ -40,7 +40,7 @@ Document tools open in a dedicated page workspace, with the file and its preview
 | --- | --- |
 | **Documents** | Keep uploaded files in a device-local workspace, then merge PDFs in a reorderable file queue, select page thumbnails or enter ranges to split, reorder/rotate/remove PDF pages, add watermarks or page numbers, compress PDFs with quality presets, convert PDFs to editable Word text, plain text, PNG, or JPG, preview DOCX pages before creating a visual PDF or exporting PNG/JPG page images, extract Word paragraphs/lists/tables and PowerPoint slide text, export XLSX worksheets to CSV, combine images into PDF, or paginate text files as PDF. Tools open in a full-page workspace. |
 | **Layout-aware editing and translation** | Work from full-page PDF or rendered Word previews. Edit PDF text fields or DOCX paragraphs directly over their original page positions; undo or redo either editor's changes, reset to the source text, and download an editable DOCX or a visual PDF. Translate Word documents to an editable DOCX or image-backed PDF while retaining paragraph structure and source styles where possible. Undo or restore a translation, or keep up to three recent language-pair results in the current session and switch between them without translating again. OCR scanned PDFs in an expandable set of languages, translate related text blocks on-device first, or choose an optional DeepL online fallback after consent. Compare matching original and translated PDF pages side by side and export a layout-aware PDF. The language choices use compact buttons rather than dropdowns; translated Arabic and Hebrew blocks are laid out right-to-left. |
-| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, choose source and target languages with buttons, translate timed subtitle cues with local-first or consent-based DeepL options, preview them in place, burn them into a WebM export, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, subtitle cues, and their source/target language pair later. |
+| **Video studio** | Edit directly in the video page: add multiple local clips, set each clip’s in/out points, reorder or remove clips on a timeline, import and edit SRT captions, choose source and target languages with buttons, translate timed subtitle cues with local-first or consent-based DeepL options, preview them in place, burn them into an MP4 export when the browser supports it or WebM otherwise, and export the subtitle track separately. Save named edit projects locally to reopen clip order, trims, subtitle cues, and their source/target language pair later. |
 
 ### Small details, big difference
 
@@ -65,10 +65,10 @@ Then open `http://localhost:8000` in a recent Chrome or Edge browser. You can al
 python -m http.server 8000
 ```
 
-Run the edit-history unit tests with Node.js, without installing packages:
+Run the unit tests with Node.js, without installing packages:
 
 ```bash
-node --test tests/edit-history.test.cjs tests/docx-text-mapping.test.cjs
+node --test tests/*.test.cjs
 ```
 
 Internet access is needed to load the conversion and PDF libraries. By default, selected documents and videos are processed in the browser tab and are not posted to a Transformo server.
@@ -116,8 +116,7 @@ transformoDocs/
 ├── edit-history.js     # Shared bounded undo/redo snapshots for text editors
 ├── docx-text-mapping.js # Match rendered Word paragraphs to source document order
 ├── tests/
-│   ├── edit-history.test.cjs # Node built-in tests for edit history
-│   └── docx-text-mapping.test.cjs # Paragraph matching regression tests
+│   └── *.test.cjs        # Node built-in tests for editor/export helpers
 ├── app.js              # App navigation and task workflows
 ├── document-engine.js  # In-browser PDF and image/text conversion
 ├── translate-proxy.mjs # Optional local DeepL bridge for consent-based cloud fallback
@@ -126,7 +125,8 @@ transformoDocs/
 ├── workspace.css       # Saved-file selection and workspace controls
 ├── feedback.css        # Toast feedback above dialogs
 ├── tool-workspace.css  # Full-page document tools and page previews
-├── video-engine.js     # Local multi-clip projects, trim, captions, SRT, and WebM export
+├── video-export-format.js # Browser-supported MP4/WebM recorder selection
+├── video-engine.js     # Local multi-clip projects, trim, captions, SRT, and video export
 ├── assets/preview.svg  # README workspace illustration
 └── README.md           # Setup, features, limits, and roadmap
 ```
@@ -145,7 +145,7 @@ PDF merge, visual page selection, page organization, watermarks, page numbers, i
 - Translation defaults to the browser's built-in Translator API, when available. Transformo shows model readiness before starting and reports first-use model download progress. Chrome documents this API for desktop use; other browsers and language pairs vary. Smart mode tries on-device first and only falls back online after the user enables the DeepL consent checkbox; users can also choose on-device only or online only. The optional bridge requires a user-provided DeepL API key. New DeepL API Developer accounts include 1 million free characters total (not monthly); the legacy monthly Free plan is no longer available to new subscribers. Check your account plan because other API plans can be paid. Document text leaves the browser only after the explicit consent choice. See [Chrome's Translator API documentation](https://developer.chrome.com/docs/ai/translator-api/) and the DeepL links above.
 - The language picker follows Chrome's documented language-code list; availability still depends on the browser and selected pair.
 - Replacement covers sample their nearby page color, which works for many tinted regions. Gradients, photographs, columns, and rotated text still need careful review.
-- Video export joins trimmed timeline clips into a WebM sequence with timed, burned-in subtitles and audio where the browser supports media capture. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the same local-first, consent-based DeepL option as document translation and translates from English. Transitions and MP4 export are not implemented yet.
+- Video export joins trimmed timeline clips into a sequence with timed, burned-in subtitles and audio where the browser supports media capture. Transformo prefers MP4 when MediaRecorder reports an available MP4 codec and falls back to WebM; actual browser and codec support varies. SRT import accepts numbered cues with standard hours:minutes:seconds,milliseconds timestamps; cue times are measured against the combined timeline, and cues outside its duration are omitted from export. Subtitle translation uses the same local-first, consent-based DeepL option as document translation and translates from English. Clip transitions are not implemented yet.
 - PDF text edits and DOCX paragraph edits support undo, redo, and reset during the current editor session. Translation results have a one-step undo/redo, and up to three recent language-pair results are kept in memory for the currently open document; they are not saved across a reload. Changing the language pair returns to source text before another translation starts. DOCX editing, translation, and DOCX-to-PDF use browser-rendered page previews. Translated DOCX output replaces matched paragraph text in the original package and reuses the first run's styling where possible; longer translations can reflow in Word and unmatched paragraphs are reported. PDF translation output remains image-backed for visual fidelity. DOCX-to-text and PPTX-to-text extract content without preserving document/slide layout or styling. XLSX-to-CSV exports worksheet values, not cell formatting; formula cells use saved values. Native Word structure editing, PPTX editing, and spreadsheet editing are not implemented.
 - Files and saved video projects are persisted in this browser profile with IndexedDB. They stay on the device, but browser storage can be cleared by the user or browser; large video files may exceed available quota. Video projects refer to source clips in the local workspace, and Transformo prevents removing a clip while a saved project still uses it. Save changes manually; unsaved edits trigger a leave/reload warning. Static PDF/OCR libraries, OCR language data, and Noto font subsets are fetched from CDNs. Font requests identify the requested font family, not the document text.
 

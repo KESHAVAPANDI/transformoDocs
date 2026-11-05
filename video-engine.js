@@ -254,7 +254,8 @@
     const count = clips.length, duration = totalDuration();
     const summary = workspace.querySelector('#timeline-summary'); if (summary) summary.textContent = `${count} clip${count === 1 ? '' : 's'} · ${format(duration)}`;
     const total = workspace.querySelector('#timeline-duration'); if (total) total.textContent = format(duration);
-    const button = workspace.querySelector('#export-video'); if (button) button.disabled = !count || clips.some(clip => clip.end <= clip.start);
+    const button = workspace.querySelector('#export-video'), exportFormat = window.MediaRecorder ? window.TransformoVideoExportFormat.selectVideoExportFormat(type => MediaRecorder.isTypeSupported(type)) : null;
+    if (button) { button.disabled = !count || clips.some(clip => clip.end <= clip.start) || !exportFormat; button.innerHTML = exportFormat ? `Export ${exportFormat.extension.toUpperCase()} timeline <span>↗</span>` : 'Video export unavailable'; }
     const save = workspace.querySelector('#save-video-project'); if (save) save.disabled = !count || clips.some(clip => !clip.duration || !(clip.fileId || window.TransformoWorkspaceFiles?.idFor(clip.file)));
   }
   function wrapText(ctx, text, maxWidth) {
@@ -298,6 +299,8 @@
   async function exportVideo() {
     const workspace = root(), video = workspace?.querySelector('#source-video'), canvas = workspace?.querySelector('#render-canvas'); if (!video || !canvas || !clips.length) return;
     if (!window.MediaRecorder || !canvas.captureStream) { notify('Video export is not supported in this browser. Try a recent Chrome or Edge.'); return; }
+    let exportFormat = window.TransformoVideoExportFormat.selectVideoExportFormat(type => MediaRecorder.isTypeSupported(type));
+    if (!exportFormat) { notify('This browser does not report support for MP4 or WebM recording.'); return; }
     const exportClips = clips.map(clip => ({ ...clip }));
     if (exportClips.some(clip => clip.end <= clip.start)) { notify('Each clip needs an out point after its in point.'); return; }
     const button = workspace.querySelector('#export-video'), status = workspace.querySelector('#video-editor-status'), subtitleLink = workspace.querySelector('#download-subtitles');
@@ -313,9 +316,13 @@
       const context = canvas.getContext('2d'); stream = canvas.captureStream(30);
       const audioTracks = graph?.destination.stream.getAudioTracks() || (video.captureStream?.() || video.mozCaptureStream?.())?.getAudioTracks() || [];
       audioTracks.forEach(track => stream.addTrack(track));
-      const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-      const mime = preferred.find(type => MediaRecorder.isTypeSupported(type));
-      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); const chunks = [];
+      try { recorder = new MediaRecorder(stream, { mimeType: exportFormat.mimeType }); }
+      catch (error) {
+        const fallback = window.TransformoVideoExportFormat.selectVideoExportFormat(type => type.startsWith('video/webm') && MediaRecorder.isTypeSupported(type));
+        if (!fallback || fallback.mimeType === exportFormat.mimeType) throw error;
+        exportFormat = fallback; recorder = new MediaRecorder(stream, { mimeType: exportFormat.mimeType });
+      }
+      const chunks = [];
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       const finished = new Promise((resolve, reject) => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || 'video/webm' })); recorder.onerror = () => reject(new Error('The browser could not finish the video render.')); });
       const draw = (timelinePosition = 0) => {
@@ -339,11 +346,12 @@
       video.pause(); if (recorder.state !== 'inactive') recorder.stop();
       const blob = await finished; if (graph) stream.getVideoTracks().forEach(track => track.stop()); else stream.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1;
       if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = URL.createObjectURL(blob);
-      const link = workspace.querySelector('#download-video'); link.href = exportUrl; link.download = `${safeBase(exportClips[0].file.name)}-transformo.webm`; link.hidden = false;
+      const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const link = workspace.querySelector('#download-video'); link.href = exportUrl; link.download = `${safeBase(exportClips[0].file.name)}-transformo.${extension}`; link.hidden = false;
       const srt = subtitleSrt();
       if (srt) { subtitleUrl = URL.createObjectURL(new Blob([srt], { type: 'text/plain;charset=utf-8' })); subtitleLink.href = subtitleUrl; subtitleLink.download = `${safeBase(exportClips[0].file.name)}-subtitles.srt`; subtitleLink.hidden = false; }
       const duration = exportClips.reduce((sum, clip) => sum + clip.end - clip.start, 0);
-      status.textContent = `Export ready · ${format(duration)} · ${(blob.size / 1048576).toFixed(1)} MB`; notify('Your edited video timeline is ready to download.');
+      status.textContent = `Export ready · ${extension.toUpperCase()} · ${format(duration)} · ${(blob.size / 1048576).toFixed(1)} MB`; notify('Your edited video timeline is ready to download.');
     } catch (error) {
       if (recorder?.state !== 'inactive') recorder?.stop(); if (graph) stream?.getVideoTracks().forEach(track => track.stop()); else stream?.getTracks().forEach(track => track.stop()); if (graph) graph.monitor.gain.value = 1; status.textContent = error.message || 'Video export failed.'; notify(status.textContent);
     } finally { button.disabled = false; updateTotals(); }
