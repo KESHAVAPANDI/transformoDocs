@@ -653,25 +653,39 @@
     return String(value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
   }
 
+  function pdfDocxDocumentXml(pages) {
+    const firstPage = pages[0], pageWidth = Math.max(6120, Math.round(firstPage.width * 20)), pageHeight = Math.max(7920, Math.round(firstPage.height * 20));
+    const orientation = pageWidth > pageHeight ? ' w:orient="landscape"' : '', body = pages.map((page, pageIndex) => {
+      let previousBottom = 36;
+      const paragraphs = page.lines.map(line => {
+        const left = Math.max(0, Math.min(page.width - 36, line.x - 36)), top = Math.max(36, page.height - line.y - line.height), before = Math.max(0, top - previousBottom), size = Math.max(6, Math.min(72, line.size || 10));
+        previousBottom = Math.max(previousBottom, top + line.height);
+        const rightToLeft = /[\u0590-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/u.test(line.text);
+        const bidi = rightToLeft ? '<w:bidi/>' : '', rtl = rightToLeft ? '<w:rtl/>' : '';
+        return `<w:p><w:pPr>${bidi}<w:ind w:left="${Math.round(left * 20)}"/><w:spacing w:before="${Math.round(before * 20)}" w:after="0"/></w:pPr><w:r><w:rPr><w:sz w:val="${Math.round(size * 2)}"/>${rtl}</w:rPr><w:t xml:space="preserve">${xmlText(line.text)}</w:t></w:r></w:p>`;
+      }).join('');
+      return `${pageIndex ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ''}${paragraphs}`;
+    }).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}"${orientation}/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  }
+
+  function createDocxArchive(pages) {
+    const archive = new JSZip();
+    archive.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    archive.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    archive.file('word/document.xml', pdfDocxDocumentXml(pages));
+    return archive;
+  }
+
   async function pdfToDocx(file) {
     requireLibraries('JSZip');
     if (!file?.name?.toLowerCase().endsWith('.pdf')) throw new Error('Choose a PDF file.');
     const pages = await inspectPdf(file), textLines = pages.reduce((total, page) => total + page.lines.length, 0);
     if (pages.some(page => !page.lines.length)) throw new Error('This PDF contains scanned or image-only pages. Run OCR in Edit, export the OCR-enabled PDF, then convert it.');
-    const body = pages.map((page, index) => {
-      const pageBreak = index ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : '';
-      const paragraphs = page.lines.map(line => `<w:p><w:r><w:t xml:space="preserve">${xmlText(line.text)}</w:t></w:r></w:p>`).join('');
-      return pageBreak + paragraphs;
-    }).join('');
-    const firstPage = pages[0], pageWidth = Math.max(6120, Math.round(firstPage.width * 20)), pageHeight = Math.max(7920, Math.round(firstPage.height * 20));
-    const orientation = pageWidth > pageHeight ? ' w:orient="landscape"' : '';
-    const archive = new JSZip();
-    archive.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
-    archive.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-    archive.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}"${orientation}/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+    const archive = createDocxArchive(pages);
     const blob = await archive.generateAsync({ type: 'blob' });
     download(blob, `${safeBase(file.name)}.docx`);
-    return `Created an editable Word document from ${textLines} text lines across ${pages.length} page${pages.length === 1 ? '' : 's'}. Reading order and page breaks are kept; fonts, columns, tables, and exact layout are not reconstructed.`;
+    return `Created an editable Word document from ${textLines} text lines across ${pages.length} page${pages.length === 1 ? '' : 's'}. Approximate text positions, font sizes, and page breaks are carried over; columns, tables, and exact styling need review.`;
   }
 
   async function pdfsToDocx(files) {
@@ -682,17 +696,12 @@
       if (!file.name.toLowerCase().endsWith('.pdf')) throw new Error('PDF-to-Word conversion accepts PDF files only.');
       const pages = await inspectPdf(file), textLines = pages.reduce((total, page) => total + page.lines.length, 0);
       if (pages.some(page => !page.lines.length)) throw new Error(`${file.name} contains scanned or image-only pages. Run OCR in Edit, export the OCR-enabled PDF, then convert it.`);
-      const body = pages.map((page, index) => `${index ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ''}${page.lines.map(line => `<w:p><w:r><w:t xml:space="preserve">${xmlText(line.text)}</w:t></w:r></w:p>`).join('')}`).join('');
-      const firstPage = pages[0], pageWidth = Math.max(6120, Math.round(firstPage.width * 20)), pageHeight = Math.max(7920, Math.round(firstPage.height * 20)), orientation = pageWidth > pageHeight ? ' w:orient="landscape"' : '';
-      const archive = new JSZip();
-      archive.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
-      archive.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-      archive.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="${pageWidth}" w:h="${pageHeight}"${orientation}/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+      const archive = createDocxArchive(pages);
       outputs.push({ name: `${String(outputs.length + 1).padStart(2, '0')}-${safeBase(file.name)}.docx`, blob: await archive.generateAsync({ type: 'blob' }) });
     }
     const zip = new JSZip(); outputs.forEach(output => zip.file(output.name, output.blob));
     download(await zip.generateAsync({ type: 'blob' }), 'transformo-pdfs-to-word.zip');
-    return `Created ${outputs.length} editable Word files in a ZIP. Reading order and page breaks are kept; complex layout needs review.`;
+    return `Created ${outputs.length} editable Word files in a ZIP. Approximate text positions, font sizes, and page breaks are carried over; complex layout needs review.`;
   }
 
   async function inspectPdf(file) {
