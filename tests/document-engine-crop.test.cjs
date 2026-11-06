@@ -6,10 +6,16 @@ const TransformoPdfCrop = require('../pdf-crop.js');
 
 function loadEngine(pages) {
   let downloadedName = '';
+  const archiveFiles = [];
+  class JSZip {
+    file(name, blob) { archiveFiles.push({ name, blob }); }
+    async generateAsync() { return new Uint8Array([9]); }
+  }
   const pdf = { getPages: () => pages, save: async () => new Uint8Array([1]) };
   const window = {
     PDFLib: { PDFDocument: { load: async () => pdf } },
     pdfjsLib: { GlobalWorkerOptions: {} },
+    JSZip,
     TransformoPdfCrop,
     TransformoSearchableFont: { searchableFontFamily: () => 'Arial' }
   };
@@ -18,10 +24,11 @@ function loadEngine(pages) {
     document: { createElement: () => ({ click() {}, set download(value) { downloadedName = value; } }) },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
     Blob,
+    JSZip,
     setTimeout() {}
   };
   vm.runInNewContext(fs.readFileSync(require.resolve('../document-engine.js'), 'utf8'), sandbox);
-  return { engine: window.DocumentEngine, getDownloadedName: () => downloadedName };
+  return { engine: window.DocumentEngine, getDownloadedName: () => downloadedName, archiveFiles };
 }
 
 function page(width, height, rotation = 0) {
@@ -49,4 +56,16 @@ test('validates every page before changing any crop box', async () => {
   const { engine } = loadEngine(pages);
   await assert.rejects(engine.cropPdf({ name: 'sample.pdf', arrayBuffer: async () => new ArrayBuffer(0) }, { left: 200, right: 20, top: 0, bottom: 0 }), /consume the entire page/);
   assert.deepEqual(pages.map(item => item.crop), [null, null]);
+});
+
+test('batch crops PDFs into one zip with unique names and progress', async () => {
+  const pages = [page(600, 800)];
+  const { engine, getDownloadedName, archiveFiles } = loadEngine(pages), progress = [];
+  await engine.cropPdfs([
+    { name: 'report.pdf', arrayBuffer: async () => new ArrayBuffer(0) },
+    { name: 'report.pdf', arrayBuffer: async () => new ArrayBuffer(0) }
+  ], { left: 10, right: 0, top: 0, bottom: 0 }, (done, total) => progress.push([done, total]));
+  assert.deepEqual(archiveFiles.map(file => file.name), ['report-cropped.pdf', 'report-cropped (2).pdf']);
+  assert.deepEqual(progress, [[1, 2], [2, 2]]);
+  assert.equal(getDownloadedName(), 'transformo-cropped-pdfs.zip');
 });

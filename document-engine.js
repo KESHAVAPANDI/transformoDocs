@@ -97,7 +97,7 @@
     return { compressed: true, originalBytes: file.size, outputBytes: blob.size, pageCount };
   }
 
-  async function cropPdf(file, margins, onProgress = () => {}) {
+  async function croppedPdfBlob(file, margins, onProgress = () => {}) {
     requireLibraries('PDFLib');
     if (!window.TransformoPdfCrop) throw new Error('The PDF crop helper did not load. Reload Transformo and try again.');
     if (!file?.name?.toLowerCase().endsWith('.pdf')) throw new Error('Choose a PDF to crop.');
@@ -105,8 +105,27 @@
     const pdf = await PDFDocument.load(await file.arrayBuffer()), pages = pdf.getPages();
     const boxes = pages.map(page => window.TransformoPdfCrop.cropBoxForMargins(page.getCropBox(), values, page.getRotation().angle));
     pages.forEach((page, index) => { const box = boxes[index]; page.setCropBox(box.x, box.y, box.width, box.height); onProgress(index + 1, pages.length); });
-    download(bytesToBlob(await pdf.save()), `${safeBase(file.name)}-cropped.pdf`);
-    return `Cropped ${pages.length} page${pages.length === 1 ? '' : 's'}. Text and underlying page content remain intact; the source is unchanged.`;
+    return { blob: bytesToBlob(await pdf.save()), pageCount: pages.length };
+  }
+
+  async function cropPdf(file, margins, onProgress = () => {}) {
+    const { blob, pageCount } = await croppedPdfBlob(file, margins, onProgress);
+    download(blob, `${safeBase(file.name)}-cropped.pdf`);
+    return `Cropped ${pageCount} page${pageCount === 1 ? '' : 's'}. Text and underlying page content remain intact; the source is unchanged.`;
+  }
+
+  async function cropPdfs(files, margins, onProgress = () => {}) {
+    requireLibraries('JSZip');
+    if (!files.length) throw new Error('Choose at least one PDF to crop.');
+    const zip = new JSZip(), names = new Set();
+    for (const [index, file] of files.entries()) {
+      const { blob } = await croppedPdfBlob(file, margins);
+      const base = `${safeBase(file.name)}-cropped`, name = (() => { let candidate = `${base}.pdf`, suffix = 2; while (names.has(candidate.toLowerCase())) candidate = `${base} (${suffix++}).pdf`; names.add(candidate.toLowerCase()); return candidate; })();
+      zip.file(name, blob);
+      onProgress(index + 1, files.length);
+    }
+    download(await zip.generateAsync({ type: 'blob' }), 'transformo-cropped-pdfs.zip');
+    return `Cropped ${files.length} PDF${files.length === 1 ? '' : 's'} into one ZIP. Text and underlying page content remain intact; originals are unchanged.`;
   }
 
   async function splitPdf(file, range) {
@@ -1126,5 +1145,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, cropPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, applyDocxTranslationTexts, captureDocxTranslationTexts, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, cropPdf, cropPdfs, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, applyDocxTranslationTexts, captureDocxTranslationTexts, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
