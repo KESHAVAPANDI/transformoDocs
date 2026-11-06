@@ -32,7 +32,7 @@ Transformo is a local-first web workspace for common document operations and a f
 
 ## Design direction
 
-Document tools open in a dedicated page workspace, with the file and its preview kept in view through the operation. Tool discovery follows the clear task groupings used by [iLovePDF](https://www.ilovepdf.com/), while the interface uses layered, translucent surfaces informed by [Apple's Human Interface Guidelines for materials](https://developer.apple.com/design/human-interface-guidelines/materials).
+Document tools open in a dedicated page workspace, with the file and its preview kept in view through the operation. Tool discovery follows clear task groupings, while the interface uses layered, translucent surfaces informed by [Apple's Human Interface Guidelines for materials](https://developer.apple.com/design/human-interface-guidelines/materials).
 
 ## ✨ The experience
 
