@@ -97,6 +97,18 @@
     return { compressed: true, originalBytes: file.size, outputBytes: blob.size, pageCount };
   }
 
+  async function cropPdf(file, margins, onProgress = () => {}) {
+    requireLibraries('PDFLib');
+    if (!window.TransformoPdfCrop) throw new Error('The PDF crop helper did not load. Reload Transformo and try again.');
+    if (!file?.name?.toLowerCase().endsWith('.pdf')) throw new Error('Choose a PDF to crop.');
+    const values = Object.fromEntries(['left', 'right', 'top', 'bottom'].map(side => [side, window.TransformoPdfCrop.millimetersToPoints(margins[side])]));
+    const pdf = await PDFDocument.load(await file.arrayBuffer()), pages = pdf.getPages();
+    const boxes = pages.map(page => window.TransformoPdfCrop.cropBoxForMargins(page.getCropBox(), values, page.getRotation().angle));
+    pages.forEach((page, index) => { const box = boxes[index]; page.setCropBox(box.x, box.y, box.width, box.height); onProgress(index + 1, pages.length); });
+    download(bytesToBlob(await pdf.save()), `${safeBase(file.name)}-cropped.pdf`);
+    return `Cropped ${pages.length} page${pages.length === 1 ? '' : 's'}. Text and underlying page content remain intact; the source is unchanged.`;
+  }
+
   async function splitPdf(file, range) {
     requireLibraries('PDFLib');
     const source = await PDFDocument.load(await file.arrayBuffer());
@@ -820,7 +832,7 @@
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
         if (!blob) throw new Error(`Page ${number} could not be rendered for preview.`);
-        pages.push({ number, blob });
+        pages.push({ number, blob, width: viewport.width / scale, height: viewport.height / scale });
         canvas.width = 0; canvas.height = 0;
       }
       return { pages, total: pdf.numPages };
@@ -1114,5 +1126,5 @@
     return overflowLines;
   }
 
-  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, applyDocxTranslationTexts, captureDocxTranslationTexts, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
+  window.DocumentEngine = { mergePdfs, watermarkPdf, numberPdf, compressPdf, cropPdf, splitPdf, organizePdf, imagesToPdf, textToPdf, docxToText, renderDocxPreview, docxToPdf, docxToImages, createDocxEditOverlay, clearDocxEdit, setDocxEditMode, resetDocxEdit, undoDocxEdit: container => container?.__transformoUndoDocxEdit?.() || false, redoDocxEdit: container => container?.__transformoRedoDocxEdit?.() || false, exportDocxEditedPdf, exportDocxEditedDocx, translateDocxInPlace, applyDocxTranslationTexts, captureDocxTranslationTexts, clearDocxTranslation, setDocxTranslationMode, exportDocxTranslatedPdf, exportDocxTranslatedDocx, pptxToText, xlsxToCsv, pdfsToImages, pdfsToText, pdfsToDocx, inspectPdf, renderPdfPages, ocrPdf, supportsTranslation, translateTextBlocks, translateLines, exportPositionedPdf, download };
 })();
